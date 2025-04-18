@@ -178,7 +178,17 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-24">
       {/* Update title */}
-      <h1 className="text-4xl font-bold mb-8">Google Cloud Vision OCR</h1>
+      <h1 className="text-4xl font-bold mb-8">Festival Sync</h1>
+      
+      {/* Spotify Login Button */}
+      <div className="mb-8">
+        <a 
+          href="/api/auth/login/spotify" 
+          className="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition duration-300"
+        >
+          Login with Spotify
+        </a>
+      </div>
 
       <div className="flex flex-col items-center gap-4 mb-8">
         <input
