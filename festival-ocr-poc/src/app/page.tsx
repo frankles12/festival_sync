@@ -11,16 +11,24 @@ interface ArtistEntry {
   selected: boolean;
 }
 
+// Define type for Spotify search results
+interface FoundArtist {
+  searchQuery: string;
+  id: string;
+  name: string;
+  uri: string;
+}
+
 export default function Home() {
   const { data: session, status } = useSession();
 
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [ocrResult, setOcrResult] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  // Update state to use the new type
-  const [parsedArtists, setParsedArtists] = useState<ArtistEntry[]>([]); 
-  // Remove progress state, as API call doesn't provide fine-grained progress
-  // const [progress, setProgress] = useState<number>(0); 
+  const [parsedArtists, setParsedArtists] = useState<ArtistEntry[]>([]);
+  const [isSearchingSpotify, setIsSearchingSpotify] = useState<boolean>(false);
+  const [spotifyResults, setSpotifyResults] = useState<FoundArtist[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null); // State for errors
 
   // Log session whenever it changes (for debugging)
   useEffect(() => {
@@ -38,18 +46,12 @@ export default function Home() {
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       setSelectedImage(event.target.files[0]);
-      setOcrResult(''); // Clear previous result
-      setParsedArtists([]); // Clear parsed artists
-      // setProgress(0); // Reset progress
+      setOcrResult('');
+      setParsedArtists([]);
+      setSpotifyResults([]); // Clear spotify results on new image
+      setSearchError(null); // Clear errors
     }
   };
-
-  // Remove preprocessImage function
-  /*
-  const preprocessImage = (file: File): Promise<HTMLCanvasElement> => {
-    // ... implementation removed ...
-  };
-  */
 
   // Helper function to convert File to base64
   const fileToBase64 = (file: File): Promise<string> => {
@@ -76,14 +78,6 @@ export default function Home() {
 
     const lines = rawText.split('\n');
     const candidates = new Set<string>(); // Use Set for automatic deduplication
-
-    // Remove the isLikelyMultiCap function
-    /*
-    const isLikelyMultiCap = (str: string): boolean => {
-      if (!str.includes(' ')) return false; 
-      return /^[A-Z0-9&' ]+$/.test(str); 
-    };
-    */
 
     for (const line of lines) {
       const trimmedLine = line.trim();
@@ -125,15 +119,48 @@ export default function Home() {
     );
   };
   
-  // Handler for the confirm button
-  const handleConfirmArtists = () => {
+  // Update function to call the new API route
+  const handleConfirmArtists = async () => {
     const selectedNames = parsedArtists
       .filter(artist => artist.selected)
       .map(artist => artist.name);
       
-    console.log("Confirmed Artists:", selectedNames);
-    // Next Step: Send selectedNames to Spotify matching logic
-    alert(`Confirmed ${selectedNames.length} artists! (Check console for list)`);
+    if (selectedNames.length === 0) {
+        alert("Please select at least one artist.");
+        return;
+    }
+
+    console.log("Confirmed Artists Names:", selectedNames);
+    setIsSearchingSpotify(true);
+    setSpotifyResults([]); // Clear previous results
+    setSearchError(null); // Clear previous errors
+
+    try {
+        const response = await fetch('/api/spotify/find-artists', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ artists: selectedNames }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error('Spotify Search API Error:', data.error || response.statusText);
+            throw new Error(data.error || `API request failed with status ${response.status}`);
+        }
+        
+        console.log("Spotify Search Results:", data.foundArtists);
+        setSpotifyResults(data.foundArtists || []);
+        
+    } catch (error) {
+        console.error('Error calling find-artists API:', error);
+        const message = error instanceof Error ? error.message : "An unknown error occurred during Spotify search.";
+        setSearchError(message);
+    } finally {
+        setIsSearchingSpotify(false);
+    }
   };
 
   const handleOcr = async () => {
@@ -144,7 +171,6 @@ export default function Home() {
 
     setIsLoading(true);
     setOcrResult('');
-    // setProgress(0);
 
     try {
       console.log('Converting image to base64...');
@@ -187,7 +213,6 @@ export default function Home() {
       setParsedArtists([]); // Clear artists on error
     } finally {
       setIsLoading(false);
-      // setProgress(100); // Not needed anymore
     }
   };
 
@@ -241,12 +266,12 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Loading Indicator */} 
-          {isLoading && <p>Loading...</p>}
+          {/* OCR Loading Indicator */} 
+          {isLoading && <p>Loading OCR results...</p>}
 
           {/* Display Parsed Artists List with Checkboxes */}
-          {parsedArtists.length > 0 && (
-            <div className="mt-8 p-4 border border-blue-300 rounded-md bg-blue-500 w-full max-w-xl">
+          {parsedArtists.length > 0 && !isSearchingSpotify && !spotifyResults.length && (
+            <div className="mt-8 p-4 border border-blue-300 rounded-md bg-blue-50 w-full max-w-xl">
               <h2 className="text-xl font-semibold mb-2">Review Artist Candidates:</h2>
               <p className="text-sm mb-2 text-gray-600">Uncheck any items that are not artists.</p>
               <ul className="space-y-1">
@@ -267,18 +292,43 @@ export default function Home() {
               </ul>
               <button 
                  onClick={handleConfirmArtists}
-                 className="mt-4 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                 disabled={isSearchingSpotify} // Disable while searching
+                 className="mt-4 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Confirm Artist List
+                {isSearchingSpotify ? 'Searching Spotify...' : 'Find Artists on Spotify'} 
               </button>
             </div>
           )}
+          
+          {/* Spotify Search Loading/Error Indicator */}
+          {isSearchingSpotify && <p className="mt-4">Searching Spotify for artists...</p>}
+          {searchError && <p className="mt-4 text-red-600">Error: {searchError}</p>}
+
+          {/* Display Spotify Search Results */} 
+          {spotifyResults.length > 0 && (
+             <div className="mt-8 p-4 border border-green-300 rounded-md bg-green-50 w-full max-w-xl">
+                <h2 className="text-xl font-semibold mb-2">Spotify Search Results:</h2>
+                <p className="text-sm mb-2 text-gray-600">Found {spotifyResults.length} artists on Spotify.</p>
+                <ul className="list-disc list-inside text-sm space-y-1">
+                   {spotifyResults.map((artist) => (
+                     <li key={artist.id}>
+                        {`${artist.searchQuery} -> `}
+                        <a href={artist.uri} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                           {artist.name}
+                        </a>
+                        {` (ID: ${artist.id})`}
+                     </li>
+                   ))}
+                </ul>
+                 {/* TODO: Add button here to trigger next step: comparing with user's library */}
+             </div>
+          )}
 
           {/* Keep raw text display for comparison (optional) */}
-          {ocrResult && (
+          {ocrResult && !isSearchingSpotify && spotifyResults.length === 0 && (
             <div className="mt-8 p-4 border border-gray-300 rounded-md bg-gray-50 w-full max-w-xl">
-              <h2 className="text-xl font-semibold mb-2">Raw Extracted Text:</h2>
-              <pre className="whitespace-pre-wrap text-sm">{ocrResult}</pre>
+               <h2 className="text-xl font-semibold mb-2">Raw Extracted Text:</h2>
+               <pre className="whitespace-pre-wrap text-sm">{ocrResult}</pre>
             </div>
           )}
         </div>
