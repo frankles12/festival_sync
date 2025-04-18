@@ -1,0 +1,3 @@
+Improve UX for filtering records
+    Clicking on entry turns entry into a text field allowing user to comma seperate artists
+    
