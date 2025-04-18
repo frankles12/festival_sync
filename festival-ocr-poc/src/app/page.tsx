@@ -19,6 +19,9 @@ interface FoundArtist {
   uri: string;
 }
 
+// Define type for final matched artists
+interface MatchedArtist extends FoundArtist { }
+
 export default function Home() {
   const { data: session, status } = useSession();
 
@@ -29,6 +32,9 @@ export default function Home() {
   const [isSearchingSpotify, setIsSearchingSpotify] = useState<boolean>(false);
   const [spotifyResults, setSpotifyResults] = useState<FoundArtist[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null); // State for errors
+  const [isComparing, setIsComparing] = useState<boolean>(false);
+  const [matchedArtists, setMatchedArtists] = useState<MatchedArtist[]>([]);
+  const [compareError, setCompareError] = useState<string | null>(null);
 
   // Log session whenever it changes (for debugging)
   useEffect(() => {
@@ -48,8 +54,10 @@ export default function Home() {
       setSelectedImage(event.target.files[0]);
       setOcrResult('');
       setParsedArtists([]);
-      setSpotifyResults([]); // Clear spotify results on new image
-      setSearchError(null); // Clear errors
+      setSpotifyResults([]);
+      setSearchError(null);
+      setMatchedArtists([]); // Clear matched artists
+      setCompareError(null); // Clear compare errors
     }
   };
 
@@ -163,6 +171,47 @@ export default function Home() {
     }
   };
 
+  // Handler for the compare button
+  const handleCompareArtists = async () => {
+      if (spotifyResults.length === 0) {
+          alert("No Spotify artists found to compare.");
+          return;
+      }
+      
+      console.log("Comparing found Spotify artists with user playlists...");
+      setIsComparing(true);
+      setMatchedArtists([]); // Clear previous results
+      setCompareError(null); // Clear previous errors
+
+      try {
+          const response = await fetch('/api/spotify/compare-artists', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+              // Send the artists found by the search
+              body: JSON.stringify({ festivalArtists: spotifyResults }), 
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+              console.error('Compare API Error:', data.error || response.statusText);
+              throw new Error(data.error || `API request failed with status ${response.status}`);
+          }
+          
+          console.log("Comparison Results:", data.matchedArtists);
+          setMatchedArtists(data.matchedArtists || []);
+          
+      } catch (error) {
+          console.error('Error calling compare-artists API:', error);
+          const message = error instanceof Error ? error.message : "An unknown error occurred during comparison.";
+          setCompareError(message);
+      } finally {
+          setIsComparing(false);
+      }
+  };
+
   const handleOcr = async () => {
     if (!selectedImage) {
       alert('Please select an image first.');
@@ -270,7 +319,7 @@ export default function Home() {
           {isLoading && <p>Loading OCR results...</p>}
 
           {/* Display Parsed Artists List with Checkboxes */}
-          {parsedArtists.length > 0 && !isSearchingSpotify && !spotifyResults.length && (
+          {parsedArtists.length > 0 && !isSearchingSpotify && spotifyResults.length === 0 && matchedArtists.length === 0 && !isComparing && (
             <div className="mt-8 p-4 border border-blue-300 rounded-md bg-blue-50 w-full max-w-xl">
               <h2 className="text-xl font-semibold mb-2">Review Artist Candidates:</h2>
               <p className="text-sm mb-2 text-gray-600">Uncheck any items that are not artists.</p>
@@ -305,7 +354,7 @@ export default function Home() {
           {searchError && <p className="mt-4 text-red-600">Error: {searchError}</p>}
 
           {/* Display Spotify Search Results */} 
-          {spotifyResults.length > 0 && (
+          {spotifyResults.length > 0 && !isComparing && matchedArtists.length === 0 && (
              <div className="mt-8 p-4 border border-green-300 rounded-md bg-green-50 w-full max-w-xl">
                 <h2 className="text-xl font-semibold mb-2">Spotify Search Results:</h2>
                 <p className="text-sm mb-2 text-gray-600">Found {spotifyResults.length} artists on Spotify.</p>
@@ -320,8 +369,37 @@ export default function Home() {
                      </li>
                    ))}
                 </ul>
-                 {/* TODO: Add button here to trigger next step: comparing with user's library */}
+                 <button 
+                    onClick={handleCompareArtists}
+                    disabled={isComparing}
+                    className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                    {isComparing ? 'Checking Playlists...' : 'Check My Playlists'}
+                 </button>
              </div>
+          )}
+
+          {/* Comparison Loading/Error Indicator */} 
+          {isComparing && <p className="mt-4">Checking your playlists for matches...</p>}
+          {compareError && <p className="mt-4 text-red-600">Error: {compareError}</p>}
+
+          {/* Display Final Matched Artists */} 
+          {matchedArtists.length > 0 && (
+             <div className="mt-8 p-4 border border-yellow-300 rounded-md bg-yellow-50 w-full max-w-xl">
+                <h2 className="text-xl font-semibold mb-2">Artists You Listen To:</h2>
+                <p className="text-sm mb-2 text-gray-600">Found {matchedArtists.length} artists from the lineup in your playlists!</p>
+                <ul className="list-disc list-inside text-sm space-y-1">
+                   {matchedArtists.map((artist) => (
+                     <li key={artist.id}>
+                         <a href={artist.uri} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{artist.name}</a>
+                     </li>
+                   ))}
+                </ul>
+             </div>
+          )}
+          {/* Also show message if comparison done but no matches found */}
+          {!isComparing && !compareError && spotifyResults.length > 0 && matchedArtists.length === 0 && (
+              <p className="mt-4 text-gray-700">No matches found in your playlists for the selected festival artists.</p>
           )}
 
           {/* Keep raw text display for comparison (optional) */}
