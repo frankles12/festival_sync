@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSession, signIn, signOut } from "next-auth/react";
 // Remove Tesseract import
 // import Tesseract from 'tesseract.js';
 
@@ -11,6 +12,8 @@ interface ArtistEntry {
 }
 
 export default function Home() {
+  const { data: session, status } = useSession();
+
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [ocrResult, setOcrResult] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -18,6 +21,19 @@ export default function Home() {
   const [parsedArtists, setParsedArtists] = useState<ArtistEntry[]>([]); 
   // Remove progress state, as API call doesn't provide fine-grained progress
   // const [progress, setProgress] = useState<number>(0); 
+
+  // Log session whenever it changes (for debugging)
+  useEffect(() => {
+    if (session) {
+      console.log("Session Data:", session);
+      // Access token is potentially available via session.accessToken
+      // Check for errors from token refresh
+      if (session.error === "RefreshAccessTokenError") {
+        console.error("Error refreshing Spotify token, signing out.");
+        signOut(); // Force sign out if token refresh fails
+      }
+    }
+  }, [session]);
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -176,84 +192,103 @@ export default function Home() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24">
-      {/* Update title */}
-      <h1 className="text-4xl font-bold mb-8">Festival Sync</h1>
-      
-      {/* Spotify Login Button */}
-      <div className="mb-8">
-        <a 
-          href="/api/auth/login/spotify" 
-          className="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition duration-300"
-        >
-          Login with Spotify
-        </a>
+    <main className="flex min-h-screen flex-col items-center p-24">
+      {/* Header Section */}
+      <div className="w-full max-w-5xl flex justify-between items-center mb-12">
+          <h1 className="text-4xl font-bold">Festival Sync</h1>
+          <div>
+            {status === "loading" && (
+              <p className="text-gray-500">Loading...</p>
+            )}
+            {status === "authenticated" && session?.user && (
+              <div className="flex items-center gap-4">
+                <span className="text-sm">Signed in as {session.user.name || session.user.email}</span>
+                <button 
+                  onClick={() => signOut()} 
+                  className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 transition duration-300"
+                >
+                    Sign Out
+                </button>
+              </div>
+            )}
+            {status === "unauthenticated" && (
+              <button 
+                onClick={() => signIn('spotify')} 
+                className="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition duration-300"
+              >
+                Login with Spotify
+              </button>
+            )}
+          </div>
       </div>
-
-      <div className="flex flex-col items-center gap-4 mb-8">
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleImageChange}
-          className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
-        />
-        <button
-          onClick={handleOcr}
-          disabled={!selectedImage || isLoading}
-          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? 'Processing...' : 'Extract Text'}
-        </button>
-      </div>
-
-      {/* Remove progress bar */}
-      {/* {isLoading && (
-        <div className="w-full max-w-md bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-          <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
-          <p className="text-center text-sm mt-1">{progress}%</p>
-        </div>
-      )} */}
       
-      {/* Show loading indicator */} 
-      {isLoading && <p>Loading...</p>}
+      {/* Rest of the content only shown if authenticated */}
+      {status === "authenticated" && (
+        <div className="flex flex-col items-center w-full">
+          <div className="flex flex-col items-center gap-4 mb-8">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
+            />
+            <button
+              onClick={handleOcr}
+              disabled={!selectedImage || isLoading}
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Processing...' : 'Extract Text'}
+            </button>
+          </div>
 
-      {/* Display Parsed Artists List with Checkboxes */}
-      {parsedArtists.length > 0 && (
-        <div className="mt-8 p-4 border border-blue-300 rounded-md bg-blue-500 w-full max-w-xl">
-          <h2 className="text-xl font-semibold mb-2">Review Artist Candidates:</h2>
-          <p className="text-sm mb-2 text-gray-600">Uncheck any items that are not artists.</p>
-          <ul className="space-y-1">
-            {parsedArtists.map((artist, index) => (
-              <li key={index} className="flex items-center">
-                <input 
-                  type="checkbox" 
-                  checked={artist.selected}
-                  onChange={() => handleArtistSelectionChange(index)}
-                  className="mr-2 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  id={`artist-${index}`}
-                />
-                <label htmlFor={`artist-${index}`} className="text-sm select-none">
-                  {artist.name}
-                </label>
-              </li>
-            ))}
-          </ul>
-          <button 
-             onClick={handleConfirmArtists}
-             className="mt-4 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-          >
-            Confirm Artist List
-          </button>
+          {/* Loading Indicator */} 
+          {isLoading && <p>Loading...</p>}
+
+          {/* Display Parsed Artists List with Checkboxes */}
+          {parsedArtists.length > 0 && (
+            <div className="mt-8 p-4 border border-blue-300 rounded-md bg-blue-500 w-full max-w-xl">
+              <h2 className="text-xl font-semibold mb-2">Review Artist Candidates:</h2>
+              <p className="text-sm mb-2 text-gray-600">Uncheck any items that are not artists.</p>
+              <ul className="space-y-1">
+                {parsedArtists.map((artist, index) => (
+                  <li key={index} className="flex items-center">
+                    <input 
+                      type="checkbox" 
+                      checked={artist.selected}
+                      onChange={() => handleArtistSelectionChange(index)}
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      id={`artist-${index}`}
+                    />
+                    <label htmlFor={`artist-${index}`} className="text-sm select-none">
+                      {artist.name}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <button 
+                 onClick={handleConfirmArtists}
+                 className="mt-4 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+              >
+                Confirm Artist List
+              </button>
+            </div>
+          )}
+
+          {/* Keep raw text display for comparison (optional) */}
+          {ocrResult && (
+            <div className="mt-8 p-4 border border-gray-300 rounded-md bg-gray-50 w-full max-w-xl">
+              <h2 className="text-xl font-semibold mb-2">Raw Extracted Text:</h2>
+              <pre className="whitespace-pre-wrap text-sm">{ocrResult}</pre>
+            </div>
+          )}
         </div>
       )}
-
-      {/* Keep raw text display for comparison (optional) */}
-      {ocrResult && (
-        <div className="mt-8 p-4 border border-gray-300 rounded-md bg-gray-50 w-full max-w-xl">
-          <h2 className="text-xl font-semibold mb-2">Raw Extracted Text:</h2>
-          <pre className="whitespace-pre-wrap text-sm">{ocrResult}</pre>
-        </div>
+      
+      {/* Show message if not authenticated */} 
+      {status === "unauthenticated" && (
+         <p className="text-gray-600 mt-10">Please log in with Spotify to use the app.</p>
       )}
+
     </main>
   );
 }
