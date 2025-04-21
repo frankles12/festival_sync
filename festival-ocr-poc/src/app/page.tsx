@@ -22,6 +22,14 @@ interface FoundArtist {
 // Define type for final matched artists
 interface MatchedArtist extends FoundArtist { }
 
+// Define type for simplified playlist data
+interface UserPlaylist {
+  id: string;
+  name: string;
+  owner: string;
+  trackCount: number;
+}
+
 export default function Home() {
   const { data: session, status } = useSession();
 
@@ -32,9 +40,16 @@ export default function Home() {
   const [isSearchingSpotify, setIsSearchingSpotify] = useState<boolean>(false);
   const [spotifyResults, setSpotifyResults] = useState<FoundArtist[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null); // State for errors
-  const [isComparing, setIsComparing] = useState<boolean>(false);
-  const [matchedArtists, setMatchedArtists] = useState<MatchedArtist[]>([]);
-  const [compareError, setCompareError] = useState<string | null>(null);
+  // Rename state for fetching playlists
+  const [isFetchingPlaylists, setIsFetchingPlaylists] = useState<boolean>(false);
+  const [userPlaylists, setUserPlaylists] = useState<UserPlaylist[]>([]);
+  const [fetchPlaylistsError, setFetchPlaylistsError] = useState<string | null>(null);
+  // State for selected playlist IDs
+  const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<Set<string>>(new Set());
+  // State for final comparison (will be used later)
+  const [isComparingSelected, setIsComparingSelected] = useState<boolean>(false);
+  const [finalMatchedArtists, setFinalMatchedArtists] = useState<MatchedArtist[]>([]);
+  const [finalCompareError, setFinalCompareError] = useState<string | null>(null);
 
   // Log session whenever it changes (for debugging)
   useEffect(() => {
@@ -56,8 +71,11 @@ export default function Home() {
       setParsedArtists([]);
       setSpotifyResults([]);
       setSearchError(null);
-      setMatchedArtists([]); // Clear matched artists
-      setCompareError(null); // Clear compare errors
+      setUserPlaylists([]); // Clear playlists
+      setFetchPlaylistsError(null); // Clear playlist errors
+      setSelectedPlaylistIds(new Set()); // Clear selected playlists
+      setFinalMatchedArtists([]); // Clear final matches
+      setFinalCompareError(null); // Clear final errors
     }
   };
 
@@ -171,44 +189,107 @@ export default function Home() {
     }
   };
 
-  // Handler for the compare button
-  const handleCompareArtists = async () => {
+  // Renamed handler for fetching playlists
+  const handleFetchPlaylists = async () => {
       if (spotifyResults.length === 0) {
-          alert("No Spotify artists found to compare.");
+          alert("No Spotify artists found to fetch playlists for."); // Should ideally not happen if button is shown
           return;
       }
       
-      console.log("Comparing found Spotify artists with user playlists...");
-      setIsComparing(true);
-      setMatchedArtists([]); // Clear previous results
-      setCompareError(null); // Clear previous errors
+      console.log("Fetching user playlists...");
+      setIsFetchingPlaylists(true);
+      setUserPlaylists([]); // Clear previous results
+      setFetchPlaylistsError(null); // Clear previous errors
+      setSelectedPlaylistIds(new Set()); // Reset selection
+      setFinalMatchedArtists([]); // Clear previous final results
+      setFinalCompareError(null);
 
       try {
-          const response = await fetch('/api/spotify/compare-artists', {
+          // Call the API route that now ONLY fetches playlists
+          const response = await fetch('/api/spotify/compare-artists', { 
               method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-              },
-              // Send the artists found by the search
-              body: JSON.stringify({ festivalArtists: spotifyResults }), 
+              // No body needed anymore for just fetching playlists
           });
 
           const data = await response.json();
 
           if (!response.ok) {
-              console.error('Compare API Error:', data.error || response.statusText);
+              console.error('Fetch Playlists API Error:', data.error || response.statusText);
               throw new Error(data.error || `API request failed with status ${response.status}`);
           }
           
-          console.log("Comparison Results:", data.matchedArtists);
-          setMatchedArtists(data.matchedArtists || []);
+          console.log("User Playlists:", data.playlists);
+          setUserPlaylists(data.playlists || []);
           
       } catch (error) {
-          console.error('Error calling compare-artists API:', error);
-          const message = error instanceof Error ? error.message : "An unknown error occurred during comparison.";
-          setCompareError(message);
+          console.error('Error calling fetch playlists API:', error);
+          const message = error instanceof Error ? error.message : "An unknown error occurred while fetching playlists.";
+          setFetchPlaylistsError(message);
       } finally {
-          setIsComparing(false);
+          setIsFetchingPlaylists(false);
+      }
+  };
+
+  // Handler for playlist selection checkboxes
+  const handlePlaylistSelectionChange = (playlistId: string) => {
+      setSelectedPlaylistIds(prevSelected => {
+          const newSelected = new Set(prevSelected);
+          if (newSelected.has(playlistId)) {
+              newSelected.delete(playlistId);
+          } else {
+              newSelected.add(playlistId);
+          }
+          return newSelected;
+      });
+  };
+  
+  // Updated handler to call the new comparison API route
+  const handleCompareSelectedPlaylists = async () => {
+      if (selectedPlaylistIds.size === 0) {
+          alert("Please select at least one playlist to compare.");
+          return;
+      }
+      if (spotifyResults.length === 0) {
+          alert("Cannot compare without initial Spotify artist search results.");
+          return;
+      }
+      
+      const selectedIdsArray = Array.from(selectedPlaylistIds); // Convert Set to Array for JSON
+      console.log("Comparing with selected playlists:", selectedIdsArray);
+      console.log("Festival artists to compare:", spotifyResults);
+      
+      setIsComparingSelected(true); 
+      setFinalMatchedArtists([]);
+      setFinalCompareError(null);
+      
+      try {
+          const response = await fetch('/api/spotify/compare-selected-playlists', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ 
+                  festivalArtists: spotifyResults, // Send the found spotify artist data
+                  selectedPlaylistIds: selectedIdsArray // Send the array of selected playlist IDs
+              }), 
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+              console.error('Compare Selected API Error:', data.error || response.statusText);
+              throw new Error(data.error || `API request failed with status ${response.status}`);
+          }
+          
+          console.log("Final Comparison Results:", data.matchedArtists);
+          setFinalMatchedArtists(data.matchedArtists || []);
+          
+      } catch (error) {
+          console.error('Error calling compare-selected-playlists API:', error);
+          const message = error instanceof Error ? error.message : "An unknown error occurred during final comparison.";
+          setFinalCompareError(message);
+      } finally {
+           setIsComparingSelected(false); 
       }
   };
 
@@ -319,10 +400,10 @@ export default function Home() {
           {isLoading && <p>Loading OCR results...</p>}
 
           {/* Display Parsed Artists List with Checkboxes */}
-          {parsedArtists.length > 0 && !isSearchingSpotify && spotifyResults.length === 0 && matchedArtists.length === 0 && !isComparing && (
-            <div className="mt-8 p-4 border border-blue-300 rounded-md bg-blue-50 w-full max-w-xl">
+          {parsedArtists.length > 0 && !isSearchingSpotify && spotifyResults.length === 0 && userPlaylists.length === 0 && (
+            <div className="mt-8 p-4 border border-blue-300 rounded-md  w-full max-w-xl">
               <h2 className="text-xl font-semibold mb-2">Review Artist Candidates:</h2>
-              <p className="text-sm mb-2 text-gray-600">Uncheck any items that are not artists.</p>
+              <p className="text-sm mb-2">Uncheck any items that are not artists.</p>
               <ul className="space-y-1">
                 {parsedArtists.map((artist, index) => (
                   <li key={index} className="flex items-center">
@@ -353,11 +434,12 @@ export default function Home() {
           {isSearchingSpotify && <p className="mt-4">Searching Spotify for artists...</p>}
           {searchError && <p className="mt-4 text-red-600">Error: {searchError}</p>}
 
-          {/* Display Spotify Search Results */} 
-          {spotifyResults.length > 0 && !isComparing && matchedArtists.length === 0 && (
+          {/* Display Spotify Search Results (Artist Found List) */} 
+          {/* Only show if results exist and we haven't fetched playlists yet */}
+          {spotifyResults.length > 0 && userPlaylists.length === 0 && !isFetchingPlaylists && (
              <div className="mt-8 p-4 border border-green-300 rounded-md bg-green-50 w-full max-w-xl">
                 <h2 className="text-xl font-semibold mb-2">Spotify Search Results:</h2>
-                <p className="text-sm mb-2 text-gray-600">Found {spotifyResults.length} artists on Spotify.</p>
+                <p className="text-sm mb-2">Found {spotifyResults.length} artists on Spotify.</p>
                 <ul className="list-disc list-inside text-sm space-y-1">
                    {spotifyResults.map((artist) => (
                      <li key={artist.id}>
@@ -369,27 +451,65 @@ export default function Home() {
                      </li>
                    ))}
                 </ul>
+                 {/* Renamed button to fetch playlists */}
                  <button 
-                    onClick={handleCompareArtists}
-                    disabled={isComparing}
+                    onClick={handleFetchPlaylists} 
+                    disabled={isFetchingPlaylists}
                     className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                  >
-                    {isComparing ? 'Checking Playlists...' : 'Check My Playlists'}
+                    {isFetchingPlaylists ? 'Fetching Playlists...' : 'Fetch My Playlists'}
                  </button>
              </div>
           )}
+          
+          {/* Playlist Fetch Loading/Error Indicator */}
+          {isFetchingPlaylists && <p className="mt-4">Fetching your playlists...</p>}
+          {fetchPlaylistsError && <p className="mt-4 text-red-600">Error: {fetchPlaylistsError}</p>}
 
-          {/* Comparison Loading/Error Indicator */} 
-          {isComparing && <p className="mt-4">Checking your playlists for matches...</p>}
-          {compareError && <p className="mt-4 text-red-600">Error: {compareError}</p>}
+          {/* Display User Playlists for Selection */} 
+          {userPlaylists.length > 0 && !isComparingSelected && (
+             <div className="mt-8 p-4 border border-indigo-300 rounded-md  w-full max-w-xl">
+                <h2 className="text-xl font-semibold mb-2">Select Playlists to Compare:</h2>
+                <p className="text-sm mb-2 text-gray-600">Choose which of your playlists to check for matches.</p>
+                <div className="max-h-60 overflow-y-auto border rounded p-2 mb-4">
+                  <ul className="space-y-1">
+                    {userPlaylists.map((playlist, index) => (
+                      <li key={`${playlist.id}-${index}`} className="flex items-center">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedPlaylistIds.has(playlist.id)}
+                          onChange={() => handlePlaylistSelectionChange(playlist.id)}
+                          className="mr-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          id={`playlist-${playlist.id}`}
+                        />
+                        <label htmlFor={`playlist-${playlist.id}`} className="text-sm select-none">
+                          {playlist.name} ({playlist.trackCount} tracks) - By {playlist.owner}
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <button 
+                   onClick={handleCompareSelectedPlaylists}
+                   disabled={selectedPlaylistIds.size === 0 || isComparingSelected}
+                   className="mt-4 px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                   {isComparingSelected ? 'Comparing...' : `Compare Selected (${selectedPlaylistIds.size}) Playlists`}
+                </button>
+             </div>
+          )}
+          
+          {/* Final Comparison Loading/Error Indicator */}
+          {isComparingSelected && <p className="mt-4">Checking selected playlists for matches...</p>}
+          {finalCompareError && <p className="mt-4 text-red-600">Error: {finalCompareError}</p>}
 
           {/* Display Final Matched Artists */} 
-          {matchedArtists.length > 0 && (
-             <div className="mt-8 p-4 border border-yellow-300 rounded-md bg-yellow-50 w-full max-w-xl">
+          {finalMatchedArtists.length > 0 && (
+             <div className="mt-8 p-4 border border-yellow-300 rounded-md w-full max-w-xl">
                 <h2 className="text-xl font-semibold mb-2">Artists You Listen To:</h2>
-                <p className="text-sm mb-2 text-gray-600">Found {matchedArtists.length} artists from the lineup in your playlists!</p>
+                <p className="text-sm mb-2 text-gray-600">Found {finalMatchedArtists.length} artists from the lineup in your selected playlists!</p>
                 <ul className="list-disc list-inside text-sm space-y-1">
-                   {matchedArtists.map((artist) => (
+                   {finalMatchedArtists.map((artist) => (
                      <li key={artist.id}>
                          <a href={artist.uri} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{artist.name}</a>
                      </li>
@@ -398,8 +518,8 @@ export default function Home() {
              </div>
           )}
           {/* Also show message if comparison done but no matches found */}
-          {!isComparing && !compareError && spotifyResults.length > 0 && matchedArtists.length === 0 && (
-              <p className="mt-4 text-gray-700">No matches found in your playlists for the selected festival artists.</p>
+          {!isComparingSelected && !finalCompareError && userPlaylists.length > 0 && selectedPlaylistIds.size > 0 && finalMatchedArtists.length === 0 && (
+              <p className="mt-4 text-gray-700">No matches found in the selected playlists for the festival artists.</p>
           )}
 
           {/* Keep raw text display for comparison (optional) */}
