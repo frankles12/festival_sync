@@ -8,6 +8,7 @@ const scopes = [
   "user-read-email",
   "playlist-read-private",
   "playlist-read-collaborative",
+  "playlist-modify-public",
   // Add other scopes as needed, e.g.:
   // "user-library-read", 
   // "user-top-read"

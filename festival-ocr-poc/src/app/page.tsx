@@ -50,6 +50,10 @@ export default function Home() {
   const [isComparingSelected, setIsComparingSelected] = useState<boolean>(false);
   const [finalMatchedArtists, setFinalMatchedArtists] = useState<MatchedArtist[]>([]);
   const [finalCompareError, setFinalCompareError] = useState<string | null>(null);
+  // State for playlist creation
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState<boolean>(false);
+  const [newPlaylistUrl, setNewPlaylistUrl] = useState<string | null>(null);
+  const [createPlaylistError, setCreatePlaylistError] = useState<string | null>(null);
 
   // Log session whenever it changes (for debugging)
   useEffect(() => {
@@ -76,6 +80,8 @@ export default function Home() {
       setSelectedPlaylistIds(new Set()); // Clear selected playlists
       setFinalMatchedArtists([]); // Clear final matches
       setFinalCompareError(null); // Clear final errors
+      setNewPlaylistUrl(null); // Clear playlist URL
+      setCreatePlaylistError(null); // Clear playlist errors
     }
   };
 
@@ -293,6 +299,56 @@ export default function Home() {
       }
   };
 
+  // Handler for creating the playlist
+  const handleCreatePlaylist = async () => {
+    if (finalMatchedArtists.length === 0) {
+      alert("No matched artists to add to a playlist.");
+      return;
+    }
+
+    console.log("Creating playlist with matched artists...");
+    setIsCreatingPlaylist(true);
+    setNewPlaylistUrl(null);
+    setCreatePlaylistError(null);
+
+    try {
+      // Maybe allow user to input name later
+      // const playlistName = prompt("Enter playlist name:", `Festival Sync Matches`);
+      // if (!playlistName) return;
+
+      const response = await fetch('/api/spotify/create-playlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          artists: finalMatchedArtists, // Send the list of matched artists
+          // playlistName: playlistName // Optional: send custom name
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Create Playlist API Error:', data.error || response.statusText);
+        throw new Error(data.error || `API request failed with status ${response.status}`);
+      }
+
+      console.log("Playlist Creation Result:", data);
+      setNewPlaylistUrl(data.playlistUrl || null);
+      if (!data.playlistUrl) {
+          setCreatePlaylistError("Playlist created, but URL not returned.");
+      }
+
+    } catch (error) {
+      console.error('Error calling create-playlist API:', error);
+      const message = error instanceof Error ? error.message : "An unknown error occurred during playlist creation.";
+      setCreatePlaylistError(message);
+    } finally {
+      setIsCreatingPlaylist(false);
+    }
+  };
+
   const handleOcr = async () => {
     if (!selectedImage) {
       alert('Please select an image first.');
@@ -394,7 +450,7 @@ export default function Home() {
             >
               {isLoading ? 'Processing...' : 'Extract Text'}
             </button>
-          </div>
+        </div>
 
           {/* OCR Loading Indicator */} 
           {isLoading && <p>Loading OCR results...</p>}
@@ -515,6 +571,23 @@ export default function Home() {
                      </li>
                    ))}
                 </ul>
+                {/* Add Create Playlist Button */}
+                 <button 
+                    onClick={handleCreatePlaylist}
+                    disabled={isCreatingPlaylist}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                   {isCreatingPlaylist ? 'Creating Playlist...' : 'Create Playlist From Matches'}
+                 </button>
+                 {/* Display Playlist Creation Status */}
+                 {isCreatingPlaylist && <p className="text-sm mt-2">Creating playlist...</p>}
+                 {createPlaylistError && <p className="text-sm mt-2 text-red-600">Error: {createPlaylistError}</p>}
+                 {newPlaylistUrl && (
+                    <p className="text-sm mt-2 text-green-700">
+                        Playlist created! 
+                        <a href={newPlaylistUrl} target="_blank" rel="noopener noreferrer" className="font-semibold underline hover:text-green-800"> View it on Spotify</a>
+                    </p>
+                 )}
              </div>
           )}
           {/* Also show message if comparison done but no matches found */}
@@ -529,7 +602,7 @@ export default function Home() {
                <pre className="whitespace-pre-wrap text-sm">{ocrResult}</pre>
             </div>
           )}
-        </div>
+    </div>
       )}
       
       {/* Show message if not authenticated */} 
