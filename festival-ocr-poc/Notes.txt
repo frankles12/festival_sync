@@ -1,3 +1,10 @@
-Improve UX for filtering records
-    Clicking on entry turns entry into a text field allowing user to comma seperate artists
+REQUESTED FEATURES:
+
+    --- REFINE SEARCH RESULTS ---
+    Artists that are searched on Spotify using results from the OCR do not always return the expected artist.
+        - User should verify the search results. Solution for incorrect results?
+
+    --- CREATE USER TUTORIAL FOR UI ---
+
+
     

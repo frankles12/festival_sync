@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession, signIn, signOut } from "next-auth/react";
 // Remove Tesseract import
 // import Tesseract from 'tesseract.js';
 
 // Define type for artist state
 interface ArtistEntry {
+  id: string; // Unique identifier for React key and state updates
   name: string;
   selected: boolean;
+  isEditing: boolean; // True if the entry is currently being edited
+  originalOcrText: string; // The originally parsed text, useful for reference or reset
 }
 
 // Define type for Spotify search results
@@ -30,6 +33,12 @@ interface UserPlaylist {
   trackCount: number;
 }
 
+interface AutocompleteArtistSuggestion {
+  id: string;
+  name: string;
+  uri: string;
+}
+
 export default function Home() {
   const { data: session, status } = useSession();
 
@@ -37,6 +46,8 @@ export default function Home() {
   const [ocrResult, setOcrResult] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [parsedArtists, setParsedArtists] = useState<ArtistEntry[]>([]);
+  // State to hold the current input value for artists being edited
+  const [editingArtistValues, setEditingArtistValues] = useState<Record<string, string>>({});
   const [isSearchingSpotify, setIsSearchingSpotify] = useState<boolean>(false);
   const [spotifyResults, setSpotifyResults] = useState<FoundArtist[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null); // State for errors
@@ -54,6 +65,12 @@ export default function Home() {
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState<boolean>(false);
   const [newPlaylistUrl, setNewPlaylistUrl] = useState<string | null>(null);
   const [createPlaylistError, setCreatePlaylistError] = useState<string | null>(null);
+
+  // State for autocomplete
+  const [activeEditIdForAutocomplete, setActiveEditIdForAutocomplete] = useState<string | null>(null);
+  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<AutocompleteArtistSuggestion[]>([]);
+  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState<boolean>(false);
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
 
   // Log session whenever it changes (for debugging)
   useEffect(() => {
@@ -98,35 +115,26 @@ export default function Home() {
   // Function to parse raw OCR text into a candidate list of artists
   const parseOcrResult = (rawText: string): ArtistEntry[] => {
     console.log('Starting parsing...');
-    // Keywords/patterns to filter out (case-insensitive)
     const noiseKeywords = [
       'VANS', 'NOV', 'BEATBOX', 'EARGASM', 
-        'PRESENTS', 'PRESENTED BY', 'SPONSORED BY', 'STAGE',
-      '\d{2}' // 2-digit numbers (adjusted from 4)
-      // Add more generic keywords if needed
+      'PRESENTS', 'PRESENTED BY', 'SPONSORED BY', 'STAGE',
+      '\d{2}'
     ];
-    // Note: Adjusted noiseRegex slightly based on keywords
     const noiseRegex = new RegExp(`^(${noiseKeywords.join('|')})$|\d{2}`, 'i'); 
 
     const lines = rawText.split('\n');
-    const candidates = new Set<string>(); // Use Set for automatic deduplication
+    const candidates = new Set<string>();
 
     for (const line of lines) {
       const trimmedLine = line.trim();
-
-      // Basic filters
-      if (trimmedLine.length < 3) continue; // Skip very short lines
-      if (noiseRegex.test(trimmedLine)) continue; // Skip lines matching noise keywords/patterns
+      if (trimmedLine.length < 3) continue;
+      if (noiseRegex.test(trimmedLine)) continue;
       
-      // Define regex to split by delimiters: • OR * OR , OR - OR two or more whitespace chars
       const splitRegex = /[•*,-]|\s{2,}/;
       const potentialNames = trimmedLine.split(splitRegex);
 
       for (const name of potentialNames) {
-        // Clean name: trim whitespace and remove any leading/trailing delimiters/spaces left over
         let cleanedName = name.trim().replace(/^[•*,\-\s]+|[•*,\-\s]+$/g, '');
-
-        // Simplified logic: Add the cleaned name directly after the main split
         if (cleanedName.length >= 3 && !noiseRegex.test(cleanedName)) {
           candidates.add(cleanedName);
         }
@@ -134,23 +142,203 @@ export default function Home() {
     }
 
     const artistEntries = Array.from(candidates).map(name => ({
+      id: crypto.randomUUID(), // Generate a unique ID
       name: name,
-      selected: true // Initially select all candidates
+      selected: true, // Initially select all candidates
+      isEditing: false, // Not editing by default
+      originalOcrText: name, // Store the original parsed text
     }));
 
     console.log('Parsing complete. Candidates:', artistEntries);
-    return artistEntries; // Return array of objects
+    return artistEntries;
   };
 
-  // Handler for checkbox changes
-  const handleArtistSelectionChange = (index: number) => {
-    setParsedArtists(prevArtists => 
-      prevArtists.map((artist, i) => 
-        i === index ? { ...artist, selected: !artist.selected } : artist
+  // Handler for toggling artist selection
+  const handleToggleArtistSelection = (id: string) => {
+    setParsedArtists(prevArtists =>
+      prevArtists.map(artist =>
+        artist.id === id ? { ...artist, selected: !artist.selected } : artist
       )
     );
   };
+
+  // Debounce function for fetching autocomplete suggestions
+  const debouncedFetchSuggestions = useCallback(
+    async (query: string, artistId: string) => {
+      if (query.trim().length < 2) {
+        setAutocompleteSuggestions([]);
+        setShowSuggestions(false);
+        return;
+      }
+      setIsFetchingSuggestions(true);
+      try {
+        const response = await fetch(`/api/spotify/autocomplete-artists?query=${encodeURIComponent(query)}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch suggestions');
+        }
+        const data = await response.json();
+        if (activeEditIdForAutocomplete === artistId) { // Ensure suggestions are for the current input
+          setAutocompleteSuggestions(data.suggestions || []);
+          setShowSuggestions(true);
+        }
+      } catch (error) {
+        console.error("Error fetching autocomplete suggestions:", error);
+        setAutocompleteSuggestions([]);
+        setShowSuggestions(false);
+      } finally {
+        setIsFetchingSuggestions(false);
+      }
+    },
+    [activeEditIdForAutocomplete] // Recreate if activeEditIdForAutocomplete changes
+  );
+
+  // Effect to trigger debounced search when the editing value for the active artist changes
+  useEffect(() => {
+    if (activeEditIdForAutocomplete && editingArtistValues[activeEditIdForAutocomplete] !== undefined) {
+      const query = editingArtistValues[activeEditIdForAutocomplete];
+      const handler = setTimeout(() => {
+        debouncedFetchSuggestions(query, activeEditIdForAutocomplete);
+      }, 500); // 500ms debounce delay
+
+      return () => {
+        clearTimeout(handler);
+      };
+    } else {
+      setAutocompleteSuggestions([]); // Clear suggestions if no active input or value
+      setShowSuggestions(false);
+    }
+  }, [editingArtistValues, activeEditIdForAutocomplete, debouncedFetchSuggestions]);
+
+  // Handler to toggle edit mode for an artist
+  const handleToggleEditMode = (id: string) => {
+    setParsedArtists(prevArtists =>
+      prevArtists.map(artist => {
+        if (artist.id === id) {
+          if (!artist.isEditing) {
+            setEditingArtistValues(prev => ({ ...prev, [id]: artist.name }));
+            setActiveEditIdForAutocomplete(id); // Set this as the active input for autocomplete
+            setShowSuggestions(false); // Hide suggestions initially
+            setAutocompleteSuggestions([]); // Clear old suggestions
+          } else {
+            // Exiting edit mode
+            setActiveEditIdForAutocomplete(null);
+            setShowSuggestions(false);
+          }
+          return { ...artist, isEditing: !artist.isEditing };
+        }
+        // If another artist was being edited, ensure it's closed (single edit mode)
+        // return artist.isEditing ? { ...artist, isEditing: false } : artist;
+        return artist;
+      })
+    );
+  };
   
+  const handleEditingArtistNameChange = (id: string, value: string) => {
+    setEditingArtistValues(prev => ({ ...prev, [id]: value }));
+    // Debounced fetch will be triggered by useEffect watching editingArtistValues[activeEditIdForAutocomplete]
+    if (id === activeEditIdForAutocomplete && value.trim().length >= 2) {
+        setShowSuggestions(true);
+    } else if (id === activeEditIdForAutocomplete) {
+        setShowSuggestions(false);
+        setAutocompleteSuggestions([]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestionName: string, artistId: string) => {
+    setEditingArtistValues(prev => ({ ...prev, [artistId]: suggestionName }));
+    setAutocompleteSuggestions([]);
+    setShowSuggestions(false);
+    // Optionally, you could immediately save or wait for user to press Enter/Save button
+    // For now, just fills the input. The user can then Save.
+    // Focus the input again after click
+    const inputElement = document.getElementById(`edit-artist-${artistId}`);
+    inputElement?.focus();
+  };
+
+  // Handler to save the edited artist name (and potentially split)
+  const handleSaveArtistName = (id: string) => {
+    const newName = editingArtistValues[id]?.trim();
+    if (typeof newName !== 'string') return; // Should not happen if editing
+
+    setParsedArtists(prevArtists => {
+      const artistIndex = prevArtists.findIndex(artist => artist.id === id);
+      if (artistIndex === -1) return prevArtists;
+
+      const originalArtist = prevArtists[artistIndex];
+      const artistsToInsert: ArtistEntry[] = [];
+
+      if (newName.includes(',')) {
+        const splitNames = newName.split(',').map(namePart => namePart.trim()).filter(namePart => namePart.length > 0);
+        splitNames.forEach(namePart => {
+          artistsToInsert.push({
+            id: crypto.randomUUID(),
+            name: namePart,
+            selected: originalArtist.selected, 
+            isEditing: false,
+            originalOcrText: originalArtist.originalOcrText, 
+          });
+        });
+      } else if (newName.length > 0) { 
+        artistsToInsert.push({
+          ...originalArtist,
+          name: newName,
+          isEditing: false,
+        });
+      } else { 
+         return prevArtists.map(a => a.id === id ? {...a, isEditing: false} : a);
+      }
+      
+      if (artistsToInsert.length === 0 && !newName.includes(',')) { 
+          return prevArtists.map(a => a.id === id ? { ...a, isEditing: false } : a);
+      }
+
+      const updatedArtists = [...prevArtists];
+      if (artistsToInsert.length > 0) {
+        updatedArtists.splice(artistIndex, 1, ...artistsToInsert);
+      } else {
+        updatedArtists.splice(artistIndex, 1);
+      }
+      
+      setEditingArtistValues(prev => {
+        const newValues = { ...prev };
+        delete newValues[id];
+        return newValues;
+      });
+      setActiveEditIdForAutocomplete(null); // Clear active autocomplete ID
+      setShowSuggestions(false); // Hide suggestions
+      setAutocompleteSuggestions([]); // Clear suggestions
+      return updatedArtists;
+    });
+  };
+
+  // Handler to cancel editing
+  const handleCancelEdit = (id: string) => {
+    setParsedArtists(prevArtists =>
+      prevArtists.map(artist =>
+        artist.id === id ? { ...artist, isEditing: false } : artist
+      )
+    );
+    setEditingArtistValues(prev => {
+      const newValues = { ...prev };
+      delete newValues[id];
+      return newValues;
+    });
+    setActiveEditIdForAutocomplete(null); // Clear active autocomplete ID
+    setShowSuggestions(false); // Hide suggestions
+    setAutocompleteSuggestions([]); // Clear suggestions
+  };
+
+  // Handler to delete an artist entry
+  const handleDeleteArtist = (id: string) => {
+    setParsedArtists(prevArtists => prevArtists.filter(artist => artist.id !== id));
+    // Clean up the editing value if it was being edited
+    setEditingArtistValues(prev => {
+      const newValues = { ...prev };
+      delete newValues[id];
+      return newValues;
+    });
+  };
+
   // Update function to call the new API route
   const handleConfirmArtists = async () => {
     const selectedNames = parsedArtists
@@ -457,22 +645,119 @@ export default function Home() {
 
           {/* Display Parsed Artists List with Checkboxes */}
           {parsedArtists.length > 0 && !isSearchingSpotify && spotifyResults.length === 0 && userPlaylists.length === 0 && (
-            <div className="mt-8 p-4 border border-blue-300 rounded-md  w-full max-w-xl">
+            <div className="mt-8 p-4 border border-blue-300 rounded-md w-full max-w-xl">
               <h2 className="text-xl font-semibold mb-2">Review Artist Candidates:</h2>
-              <p className="text-sm mb-2">Uncheck any items that are not artists.</p>
-              <ul className="space-y-1">
-                {parsedArtists.map((artist, index) => (
-                  <li key={index} className="flex items-center">
+              <p className="text-sm mb-2">
+                Select artists, edit names (use commas to split, e.g., "Artist A, Artist B"), or delete entries.
+              </p>
+              <ul className="space-y-2">
+                {parsedArtists.map((artist) => (
+                  <li key={artist.id} className="flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors group relative">
                     <input 
                       type="checkbox" 
                       checked={artist.selected}
-                      onChange={() => handleArtistSelectionChange(index)}
-                      className="mr-2 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      id={`artist-${index}`}
+                      onChange={() => handleToggleArtistSelection(artist.id)}
+                      className="mr-3 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      id={`artist-select-${artist.id}`}
                     />
-                    <label htmlFor={`artist-${index}`} className="text-sm select-none">
-                      {artist.name}
-                    </label>
+                    {artist.isEditing ? (
+                      <div className="flex-grow flex items-center gap-2">
+                        <div className="flex-grow relative">
+                          <input
+                            id={`edit-artist-${artist.id}`} // ID for focusing
+                            type="text"
+                            value={editingArtistValues[artist.id] || ''}
+                            onChange={(e) => handleEditingArtistNameChange(artist.id, e.target.value)}
+                            onFocus={() => { // When input is focused, ensure it's the active one
+                              setActiveEditIdForAutocomplete(artist.id);
+                              // Show suggestions if there's already text that meets criteria
+                              if ((editingArtistValues[artist.id]?.trim()?.length || 0) >=2) {
+                                  setShowSuggestions(true);
+                              }
+                            }}
+                            onBlur={() => {
+                                // Delay hiding suggestions to allow click on suggestion item
+                                setTimeout(() => {
+                                    if (!document.activeElement?.closest(`#suggestions-${artist.id}`)) {
+                                        setShowSuggestions(false);
+                                    }
+                                }, 100);
+                            }}
+                            className="w-full px-2 py-1 border border-blue-500 rounded-md text-sm text-black"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault(); // Prevent form submission if any
+                                handleSaveArtistName(artist.id);
+                              }
+                              if (e.key === 'Escape') handleCancelEdit(artist.id);
+                            }}
+                            aria-autocomplete="list"
+                            aria-controls={`suggestions-${artist.id}`}
+                          />
+                          {/* Autocomplete Suggestions Dropdown */}
+                          {activeEditIdForAutocomplete === artist.id && showSuggestions && autocompleteSuggestions.length > 0 && (
+                            <ul 
+                                id={`suggestions-${artist.id}`}
+                                className="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-40 overflow-y-auto shadow-lg"
+                                role="listbox"
+                            >
+                              {isFetchingSuggestions && <li className="px-3 py-2 text-sm text-gray-500">Loading...</li>}
+                              {!isFetchingSuggestions && autocompleteSuggestions.map((suggestion, index) => (
+                                <li
+                                  key={suggestion.id + '-' + index}
+                                  onClick={() => handleSuggestionClick(suggestion.name, artist.id)}
+                                  className="px-3 py-2 text-sm text-black hover:bg-blue-100 cursor-pointer"
+                                  role="option"
+                                  aria-selected={false} // Can be enhanced with keyboard navigation
+                                >
+                                  {suggestion.name}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                           {activeEditIdForAutocomplete === artist.id && showSuggestions && !isFetchingSuggestions && autocompleteSuggestions.length === 0 && (editingArtistValues[artist.id]?.trim()?.length || 0) >=2 && (
+                                <div className="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 px-3 py-2 text-sm text-gray-500 shadow-lg">
+                                    No suggestions found.
+                                </div>
+                            )}
+                        </div>
+                        <button 
+                          onClick={() => handleSaveArtistName(artist.id)}
+                          className="px-3 py-1 bg-green-500 text-white text-xs font-semibold rounded-md hover:bg-green-600"
+                        >
+                          Save
+                        </button>
+                        <button 
+                          onClick={() => handleCancelEdit(artist.id)}
+                          className="px-3 py-1 bg-gray-300 text-gray-700 text-xs font-semibold rounded-md hover:bg-gray-400"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <label htmlFor={`artist-select-${artist.id}`} className="flex-grow text-sm select-none cursor-pointer group-hover:text-black">
+                        {artist.name}
+                      </label>
+                    )}
+                    {!artist.isEditing && (
+                      <div className="ml-auto flex items-center gap-2">
+                        <button
+                          onClick={() => handleToggleEditMode(artist.id)}
+                          className="px-2 py-1 text-blue-600 hover:text-blue-800 text-xs font-medium rounded-md hover:bg-blue-100"
+                          title="Edit artist name"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteArtist(artist.id)}
+                          className="px-2 py-1 text-red-500 hover:text-red-700 text-xs font-medium rounded-md hover:bg-red-100"
+                          title="Delete artist"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
