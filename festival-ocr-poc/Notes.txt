@@ -1,10 +1,22 @@
 REQUESTED FEATURES:
 
+
+        ***BUGS***
+        When artist is replaced in "Not Correct" screen the replaced artist needs to be removed. Currently it seems like a new entry is created
+        and the entry that is being replaced is staying.
+
     --- REFINE SEARCH RESULTS ---
-    Artists that are searched on Spotify using results from the OCR do not always return the expected artist.
-        - User should verify the search results. Solution for incorrect results?
+    - While user is refining results display the uploaded image for reference
+    - Create a filter where user can swiitch between alphanumeric and list view
+    - Add tooltip to recomend going through list view first
+
+    --- NOT CORRECT PAGE ---
+    - Need to remove the old results list
+    - Move the "Fetch Playlists" button to new UI box
 
     --- CREATE USER TUTORIAL FOR UI ---
+
+
 
 
     

@@ -9,7 +9,6 @@ import { useSession, signIn, signOut } from "next-auth/react";
 interface ArtistEntry {
   id: string; // Unique identifier for React key and state updates
   name: string;
-  selected: boolean;
   isEditing: boolean; // True if the entry is currently being edited
   originalOcrText: string; // The originally parsed text, useful for reference or reset
 }
@@ -37,6 +36,14 @@ interface AutocompleteArtistSuggestion {
   id: string;
   name: string;
   uri: string;
+}
+
+// Define type for artist alternatives fetched for correction
+interface ArtistAlternative {
+  id: string;
+  name: string;
+  uri: string;
+  images?: { url: string; height?: number; width?: number }[]; // Matching Spotify's ImageObject
 }
 
 export default function Home() {
@@ -71,6 +78,13 @@ export default function Home() {
   const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<AutocompleteArtistSuggestion[]>([]);
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState<boolean>(false);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+
+  // State for artist correction modal
+  const [artistAlternativesModalOpen, setArtistAlternativesModalOpen] = useState<boolean>(false);
+  const [currentArtistForCorrection, setCurrentArtistForCorrection] = useState<FoundArtist | null>(null);
+  const [artistCorrectionAlternatives, setArtistCorrectionAlternatives] = useState<ArtistAlternative[]>([]);
+  const [isFetchingArtistAlternatives, setIsFetchingArtistAlternatives] = useState<boolean>(false);
+  const [fetchAlternativesError, setFetchAlternativesError] = useState<string | null>(null);
 
   // Log session whenever it changes (for debugging)
   useEffect(() => {
@@ -117,7 +131,7 @@ export default function Home() {
     console.log('Starting parsing...');
     const noiseKeywords = [
       'VANS', 'NOV', 'BEATBOX', 'EARGASM', 
-      'PRESENTS', 'PRESENTED BY', 'SPONSORED BY', 'STAGE',
+        'PRESENTS', 'PRESENTED BY', 'SPONSORED BY', 'STAGE',
       '\d{2}'
     ];
     const noiseRegex = new RegExp(`^(${noiseKeywords.join('|')})$|\d{2}`, 'i'); 
@@ -144,7 +158,6 @@ export default function Home() {
     const artistEntries = Array.from(candidates).map(name => ({
       id: crypto.randomUUID(), // Generate a unique ID
       name: name,
-      selected: true, // Initially select all candidates
       isEditing: false, // Not editing by default
       originalOcrText: name, // Store the original parsed text
     }));
@@ -155,7 +168,7 @@ export default function Home() {
 
   // Handler for toggling artist selection
   const handleToggleArtistSelection = (id: string) => {
-    setParsedArtists(prevArtists =>
+    setParsedArtists(prevArtists => 
       prevArtists.map(artist =>
         artist.id === id ? { ...artist, selected: !artist.selected } : artist
       )
@@ -255,10 +268,73 @@ export default function Home() {
     inputElement?.focus();
   };
 
+  // --- Artist Correction Functions ---
+  const fetchArtistAlternativesCallback = useCallback(async (artistName: string) => {
+    if (!artistName) return;
+    setIsFetchingArtistAlternatives(true);
+    setFetchAlternativesError(null);
+    setArtistCorrectionAlternatives([]); // Clear previous alternatives
+    try {
+      const response = await fetch('/api/spotify/artist-alternatives', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ artistName }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        throw new Error(errorData.error || `Error: ${response.status}`);
+      }
+      const data = await response.json();
+      setArtistCorrectionAlternatives(data.alternatives || []);
+    } catch (error: any) {
+      console.error("Error fetching artist alternatives:", error);
+      setFetchAlternativesError(error.message || 'Failed to fetch alternatives.');
+    } finally {
+      setIsFetchingArtistAlternatives(false);
+    }
+  }, []);
+
+  const handleOpenCorrectionModal = useCallback((artistToCorrect: FoundArtist) => {
+    setCurrentArtistForCorrection(artistToCorrect);
+    setArtistAlternativesModalOpen(true);
+    fetchArtistAlternativesCallback(artistToCorrect.searchQuery); // Use searchQuery for fetching alternatives
+  }, [fetchArtistAlternativesCallback]);
+
+  const handleSelectAlternative = useCallback((selectedAlternative: ArtistAlternative) => {
+    if (!currentArtistForCorrection) return;
+
+    setSpotifyResults(prevResults =>
+      prevResults.map(artist =>
+        artist.id === currentArtistForCorrection.id
+          ? { 
+              ...artist, // Keep original searchQuery and any other relevant fields
+              id: selectedAlternative.id, 
+              name: selectedAlternative.name, 
+              uri: selectedAlternative.uri 
+            }
+          : artist
+      )
+    );
+    setArtistAlternativesModalOpen(false);
+    setCurrentArtistForCorrection(null);
+    setArtistCorrectionAlternatives([]);
+    setFetchAlternativesError(null);
+  }, [currentArtistForCorrection]);
+
+  const handleCloseCorrectionModal = useCallback(() => {
+    setArtistAlternativesModalOpen(false);
+    setCurrentArtistForCorrection(null);
+    setArtistCorrectionAlternatives([]);
+    setFetchAlternativesError(null);
+  }, []);
+  // --- End Artist Correction Functions ---
+
   // Handler to save the edited artist name (and potentially split)
   const handleSaveArtistName = (id: string) => {
     const newName = editingArtistValues[id]?.trim();
-    if (typeof newName !== 'string') return; // Should not happen if editing
+    if (typeof newName !== 'string') return; 
 
     setParsedArtists(prevArtists => {
       const artistIndex = prevArtists.findIndex(artist => artist.id === id);
@@ -273,7 +349,6 @@ export default function Home() {
           artistsToInsert.push({
             id: crypto.randomUUID(),
             name: namePart,
-            selected: originalArtist.selected, 
             isEditing: false,
             originalOcrText: originalArtist.originalOcrText, 
           });
@@ -304,9 +379,9 @@ export default function Home() {
         delete newValues[id];
         return newValues;
       });
-      setActiveEditIdForAutocomplete(null); // Clear active autocomplete ID
-      setShowSuggestions(false); // Hide suggestions
-      setAutocompleteSuggestions([]); // Clear suggestions
+      setActiveEditIdForAutocomplete(null); 
+      setShowSuggestions(false); 
+      setAutocompleteSuggestions([]); 
       return updatedArtists;
     });
   };
@@ -338,19 +413,19 @@ export default function Home() {
       return newValues;
     });
   };
-
+  
   // Update function to call the new API route
   const handleConfirmArtists = async () => {
-    const selectedNames = parsedArtists
-      .filter(artist => artist.selected)
-      .map(artist => artist.name);
+    // Now includes all artists in the parsedArtists list
+    const selectedNames = parsedArtists.map(artist => artist.name); 
       
     if (selectedNames.length === 0) {
-        alert("Please select at least one artist.");
+        // This alert might now be "Please add or ensure there are artists in the list."
+        alert("No artists to search. Please add artists or ensure your OCR result yielded artists.");
         return;
     }
 
-    console.log("Confirmed Artists Names:", selectedNames);
+    console.log("Confirmed Artists Names for Spotify Search:", selectedNames);
     setIsSearchingSpotify(true);
     setSpotifyResults([]); // Clear previous results
     setSearchError(null); // Clear previous errors
@@ -643,40 +718,31 @@ export default function Home() {
           {/* OCR Loading Indicator */} 
           {isLoading && <p>Loading OCR results...</p>}
 
-          {/* Display Parsed Artists List with Checkboxes */}
+          {/* Display Parsed Artists List */}
           {parsedArtists.length > 0 && !isSearchingSpotify && spotifyResults.length === 0 && userPlaylists.length === 0 && (
             <div className="mt-8 p-4 border border-blue-300 rounded-md w-full max-w-xl">
               <h2 className="text-xl font-semibold mb-2">Review Artist Candidates:</h2>
               <p className="text-sm mb-2">
-                Select artists, edit names (use commas to split, e.g., "Artist A, Artist B"), or delete entries.
+                Edit names (use commas to split, e.g., "Artist A, Artist B"), or delete entries. All listed artists will be searched on Spotify.
               </p>
               <ul className="space-y-2">
                 {parsedArtists.map((artist) => (
                   <li key={artist.id} className="flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors group relative">
-                    <input 
-                      type="checkbox" 
-                      checked={artist.selected}
-                      onChange={() => handleToggleArtistSelection(artist.id)}
-                      className="mr-3 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      id={`artist-select-${artist.id}`}
-                    />
                     {artist.isEditing ? (
                       <div className="flex-grow flex items-center gap-2">
                         <div className="flex-grow relative">
                           <input
-                            id={`edit-artist-${artist.id}`} // ID for focusing
+                            id={`edit-artist-${artist.id}`}
                             type="text"
                             value={editingArtistValues[artist.id] || ''}
                             onChange={(e) => handleEditingArtistNameChange(artist.id, e.target.value)}
-                            onFocus={() => { // When input is focused, ensure it's the active one
+                            onFocus={() => { 
                               setActiveEditIdForAutocomplete(artist.id);
-                              // Show suggestions if there's already text that meets criteria
                               if ((editingArtistValues[artist.id]?.trim()?.length || 0) >=2) {
                                   setShowSuggestions(true);
                               }
                             }}
                             onBlur={() => {
-                                // Delay hiding suggestions to allow click on suggestion item
                                 setTimeout(() => {
                                     if (!document.activeElement?.closest(`#suggestions-${artist.id}`)) {
                                         setShowSuggestions(false);
@@ -687,7 +753,7 @@ export default function Home() {
                             autoFocus
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
-                                e.preventDefault(); // Prevent form submission if any
+                                e.preventDefault(); 
                                 handleSaveArtistName(artist.id);
                               }
                               if (e.key === 'Escape') handleCancelEdit(artist.id);
@@ -695,7 +761,6 @@ export default function Home() {
                             aria-autocomplete="list"
                             aria-controls={`suggestions-${artist.id}`}
                           />
-                          {/* Autocomplete Suggestions Dropdown */}
                           {activeEditIdForAutocomplete === artist.id && showSuggestions && autocompleteSuggestions.length > 0 && (
                             <ul 
                                 id={`suggestions-${artist.id}`}
@@ -709,7 +774,7 @@ export default function Home() {
                                   onClick={() => handleSuggestionClick(suggestion.name, artist.id)}
                                   className="px-3 py-2 text-sm text-black hover:bg-blue-100 cursor-pointer"
                                   role="option"
-                                  aria-selected={false} // Can be enhanced with keyboard navigation
+                                  aria-selected={false} 
                                 >
                                   {suggestion.name}
                                 </li>
@@ -736,12 +801,12 @@ export default function Home() {
                         </button>
                       </div>
                     ) : (
-                      <label htmlFor={`artist-select-${artist.id}`} className="flex-grow text-sm select-none cursor-pointer group-hover:text-black">
+                      <div className="flex-grow text-sm text-gray-800 group-hover:text-black mr-2">
                         {artist.name}
-                      </label>
+                      </div>
                     )}
                     {!artist.isEditing && (
-                      <div className="ml-auto flex items-center gap-2">
+                      <div className="ml-auto flex items-center gap-2 flex-shrink-0">
                         <button
                           onClick={() => handleToggleEditMode(artist.id)}
                           className="px-2 py-1 text-blue-600 hover:text-blue-800 text-xs font-medium rounded-md hover:bg-blue-100"
@@ -771,6 +836,34 @@ export default function Home() {
             </div>
           )}
           
+          {/* Spotify Search Loading/Error Indicator */}
+          {isSearchingSpotify && <p className="mt-4">Searching Spotify for artists...</p>}
+          {searchError && <p className="mt-4 text-red-600">Error: {searchError}</p>}
+
+          {/* Step 3: Display Spotify Search Results (and allow correction) */}
+          {!isLoading && spotifyResults.length > 0 && (
+            <div className="mt-6 bg-white shadow-md rounded-lg p-6">
+              <h3 className="text-2xl font-semibold text-gray-800 mb-4">Spotify Search Results:</h3>
+              <p className="text-sm text-gray-600 mb-4">Review the artists found by Spotify. If a match is incorrect, use the "Not Correct?" button to select an alternative.</p>
+              <ul className="space-y-3">
+                {spotifyResults.map((artist) => (
+                  <li key={artist.id} className="p-3 bg-gray-50 rounded-md shadow-sm flex justify-between items-center">
+                    <div>
+                      <p className="font-medium text-lg text-indigo-600">{artist.name}</p>
+                      <p className="text-sm text-gray-500">Original OCR: <span className="italic">{artist.searchQuery}</span> (ID: {artist.id})</p>
+                    </div>
+                    <button 
+                      onClick={() => handleOpenCorrectionModal(artist)}
+                      className="ml-4 px-3 py-1 bg-yellow-400 text-yellow-800 rounded-md hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-600 focus:ring-opacity-50 text-sm shrink-0"
+                    >
+                      Not Correct?
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Spotify Search Loading/Error Indicator */}
           {isSearchingSpotify && <p className="mt-4">Searching Spotify for artists...</p>}
           {searchError && <p className="mt-4 text-red-600">Error: {searchError}</p>}
@@ -887,7 +980,60 @@ export default function Home() {
                <pre className="whitespace-pre-wrap text-sm">{ocrResult}</pre>
             </div>
           )}
-    </div>
+
+          {/* Artist Correction Modal - Ensure this is outside the map, typically at a higher level in the component return or a dedicated portal */} 
+          {artistAlternativesModalOpen && currentArtistForCorrection && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
+              <div className="relative mx-auto p-8 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+                <h3 className="text-2xl font-semibold text-gray-800 mb-5">Correcting: <span className="text-indigo-600">{currentArtistForCorrection.name}</span></h3>
+                <p className="text-sm text-gray-600 mb-1">Searched as: <span className="italic">{currentArtistForCorrection.searchQuery}</span></p>
+                
+                {isFetchingArtistAlternatives && <p className="text-blue-500 my-3 text-center">Loading alternatives...</p>}
+                {fetchAlternativesError && <p className="text-red-500 my-3 text-center">Error: {fetchAlternativesError}</p>}
+
+                {!isFetchingArtistAlternatives && artistCorrectionAlternatives.length > 0 && (
+                  <div className="mt-4 max-h-80 overflow-y-auto pr-2">
+                    <p className="text-lg text-gray-700 mb-3">Select the correct artist:</p>
+                    <ul className="space-y-2">
+                      {artistCorrectionAlternatives.map(alt => (
+                        <li key={alt.id} className="p-3 bg-gray-100 rounded-md hover:bg-gray-200 flex justify-between items-center transition-colors duration-150">
+                          <div className="flex items-center space-x-3">
+                            {alt.images && alt.images[0] && (
+                              <img src={alt.images[0].url} alt={alt.name} className="h-12 w-12 rounded-full object-cover" />
+                            )}
+                            {!alt.images || !alt.images[0] && (
+                              <span className="h-12 w-12 rounded-full bg-gray-300 flex items-center justify-center text-gray-500 text-xl">?</span>
+                            )}
+                            <p className="font-medium text-gray-800">{alt.name}</p>
+                          </div>
+                          <button 
+                            onClick={() => handleSelectAlternative(alt)}
+                            className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-700 focus:ring-opacity-50 text-sm shrink-0"
+                          >
+                            Select
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {!isFetchingArtistAlternatives && !fetchAlternativesError && artistCorrectionAlternatives.length === 0 && (
+                   <p className="text-gray-600 my-3 text-center">No alternatives found for "{currentArtistForCorrection.searchQuery}". You may need to edit the OCR result first for a better search.</p>
+                )}
+
+                <div className="mt-8 flex justify-end space-x-3">
+                  <button 
+                    onClick={handleCloseCorrectionModal}
+                    className="px-5 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
       
       {/* Show message if not authenticated */} 
