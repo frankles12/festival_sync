@@ -1,5 +1,45 @@
 import { NextResponse } from 'next/server';
+export const runtime = 'nodejs';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
+import fs from 'fs';
+import path from 'path';
+
+function createVisionClient(): ImageAnnotatorClient {
+  // 1) Prefer JSON creds provided via env (GOOGLE_APPLICATION_CREDENTIALS_JSON)
+  const jsonEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (jsonEnv) {
+    try {
+      const parsed = JSON.parse(jsonEnv);
+      const privateKey: string = typeof parsed.private_key === 'string'
+        ? parsed.private_key.replace(/\\n/g, '\n')
+        : parsed.private_key;
+      return new ImageAnnotatorClient({
+        projectId: parsed.project_id,
+        credentials: {
+          client_email: parsed.client_email,
+          private_key: privateKey,
+        },
+      });
+    } catch (e) {
+      console.error('Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON', e);
+    }
+  }
+
+  // 2) If GOOGLE_APPLICATION_CREDENTIALS points to a key file, use it
+  const keyFileFromEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (keyFileFromEnv && fs.existsSync(keyFileFromEnv)) {
+    return new ImageAnnotatorClient({ keyFilename: keyFileFromEnv });
+  }
+
+  // 3) Fallback to local project key file if present (dev convenience)
+  const localKey = path.join(process.cwd(), 'google-cloud-key.json');
+  if (fs.existsSync(localKey)) {
+    return new ImageAnnotatorClient({ keyFilename: localKey });
+  }
+
+  // 4) Last resort: rely on ADC (may work in some environments like GCP)
+  return new ImageAnnotatorClient();
+}
 
 export async function POST(request: Request) {
   try {
@@ -13,18 +53,19 @@ export async function POST(request: Request) {
     // Remove the data URL prefix if it exists (e.g., "data:image/jpeg;base64,")
     const base64Data = imageBase64.split(',')[1] || imageBase64;
 
-    // Creates a client
-    const client = new ImageAnnotatorClient();
+    // Creates a client (tries several credential sources)
+    const client = createVisionClient();
 
     // Prepare the request
     const visionRequest = {
       image: {
-        content: base64Data, // Send the base64 encoded image data
+        // Convert base64 string to bytes Buffer for Vision API
+        content: Buffer.from(base64Data, 'base64'),
       },
       features: [
-        { type: 'TEXT_DETECTION' }, // Specify the feature type
+        { type: 'TEXT_DETECTION' },
       ],
-    };
+    } as const;
 
     console.log('Sending request to Google Cloud Vision API...');
     // Performs image annotation based on the specified features
@@ -46,10 +87,21 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Google Cloud Vision API Error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     // Check if the error is specifically related to authentication
-    if (error instanceof Error && (error.message.includes('Could not load the default credentials') || error.message.includes('permission'))) {
-         return NextResponse.json({ error: 'Server configuration error: Could not authenticate with Google Cloud Vision API. Check credentials.' }, { status: 500 });
+    if (
+      message.includes('Could not load the default credentials') ||
+      message.toLowerCase().includes('permission') ||
+      message.toLowerCase().includes('unauthorized')
+    ) {
+      return NextResponse.json(
+        { error: 'Server configuration error: Could not authenticate with Google Cloud Vision API. Check credentials.' },
+        { status: 500 }
+      );
     }
-    return NextResponse.json({ error: 'Failed to process image with Google Cloud Vision API.' }, { status: 500 });
+    return NextResponse.json(
+      { error: `Failed to process image with Google Cloud Vision API. ${message}` },
+      { status: 500 }
+    );
   }
 } 

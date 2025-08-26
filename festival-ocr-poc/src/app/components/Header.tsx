@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useSession, signIn, signOut } from "next-auth/react";
+import { revokeConsentDecision } from "@/app/lib/consent";
+import { trackEvent } from "@/app/lib/analytics";
 import React, { useEffect, useRef, useState } from "react";
 
 export default function Header(): React.ReactElement {
@@ -79,6 +81,16 @@ export default function Header(): React.ReactElement {
                   <div className="px-3 py-2 text-xs text-gray-500">
                     Signed in
                   </div>
+                  <button
+                    onClick={() => {
+                      revokeConsentDecision();
+                      trackEvent("consent_revoke");
+                    }}
+                    role="menuitem"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                  >
+                    Cookie preferences
+                  </button>
                   <button
                     onClick={() => signOut()}
                     role="menuitem"

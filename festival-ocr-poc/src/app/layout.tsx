@@ -6,6 +6,7 @@ import Header from "@/app/components/Header";
 import Stepper from "@/app/components/Stepper";
 import FlowNav from "@/app/components/FlowNav";
 import FlowStateProvider from "@/app/lib/state/FlowStateProvider";
+import CookieBanner from "@/app/components/CookieBanner";
 import DeepLinkGuard from "@/app/components/DeepLinkGuard";
 import { Analytics } from "@vercel/analytics/react";
 
@@ -46,6 +47,7 @@ export default function RootLayout({
               <FlowNav />
             </div>
             <Analytics />
+            <CookieBanner />
           </FlowStateProvider>
         </SessionProviderWrapper>
       </body>

@@ -1,18 +1,9 @@
 import NextAuth, { AuthOptions } from "next-auth";
 import SpotifyProvider from "next-auth/providers/spotify";
 import { JWT } from "next-auth/jwt";
+import { spotifyScopes } from "@/app/lib/spotifyScopes";
 
-// Define the Spotify scopes
-const scopes = [
-  "user-read-private",
-  "user-read-email",
-  "playlist-read-private",
-  "playlist-read-collaborative",
-  "playlist-modify-public",
-  // Add other scopes as needed, e.g.:
-  // "user-library-read", 
-  // "user-top-read"
-].join(",");
+/** Scopes are defined in @/app/lib/spotifyScopes and shared with the client UI **/
 
 /**
  * Takes a token, and returns a new token with updated
@@ -67,7 +58,7 @@ const authOptions: AuthOptions = {
       clientId: process.env.SPOTIFY_CLIENT_ID as string,
       clientSecret: process.env.SPOTIFY_CLIENT_SECRET as string,
       // Crucially, tell NextAuth which scopes we need
-      authorization: `https://accounts.spotify.com/authorize?scope=${scopes}`,
+      authorization: `https://accounts.spotify.com/authorize?scope=${spotifyScopes}`,
     }),
   ],
   secret: process.env.NEXTAUTH_SECRET,

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSession, signIn, signOut } from "next-auth/react";
+import { useSession, signOut, signIn } from "next-auth/react";
+import { spotifyScopesArray } from "@/app/lib/spotifyScopes";
 // Remove Tesseract import
 // import Tesseract from 'tesseract.js';
 
@@ -87,6 +88,10 @@ export default function Home() {
   const [isFetchingArtistAlternatives, setIsFetchingArtistAlternatives] = useState<boolean>(false);
   const [fetchAlternativesError, setFetchAlternativesError] = useState<string | null>(null);
 
+  // State for pre-auth connect CTA
+  const [isSigningIn, setIsSigningIn] = useState<boolean>(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
+
   // Log session whenever it changes (for debugging)
   useEffect(() => {
     if (session) {
@@ -125,6 +130,32 @@ export default function Home() {
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = error => reject(error);
     });
+  };
+
+  // Handle Connect Spotify CTA
+  const handleConnectSpotify = async () => {
+    try {
+      setIsSigningIn(true);
+      setSignInError(null);
+      const result = await signIn('spotify', {
+        callbackUrl: '/upload',
+        redirect: false,
+      });
+      if (result?.error) {
+        setSignInError('Failed to start Spotify sign-in. Please try again.');
+        setIsSigningIn(false);
+        return;
+      }
+      if (result?.url) {
+        window.location.href = result.url;
+      } else {
+        // Fallback: stop spinner if no redirect occurred
+        setIsSigningIn(false);
+      }
+    } catch (err) {
+      setSignInError('Unexpected error starting Spotify sign-in.');
+      setIsSigningIn(false);
+    }
   };
 
   // Function to parse raw OCR text into a candidate list of artists
@@ -1009,9 +1040,33 @@ export default function Home() {
         </div>
       )}
       
-      {/* Show message if not authenticated */} 
+      {/* Pre-auth consent screen when unauthenticated */}
       {status === "unauthenticated" && (
-         <p className="text-gray-600 mt-10">Please log in with Spotify to use the app.</p>
+        <div className="mt-10 w-full max-w-xl p-6 rounded-lg border bg-white/60 backdrop-blur shadow">
+          <h1 className="text-2xl font-semibold mb-2">Connect Spotify</h1>
+          <p className="text-sm text-gray-600 mb-4">
+            To compare your playlists with festival lineups, we request these permissions:
+          </p>
+          <ul className="mb-4 list-disc list-inside text-sm text-gray-800">
+            {spotifyScopesArray.map((scope) => (
+              <li key={scope}>{scope}</li>
+            ))}
+          </ul>
+          <button
+            onClick={handleConnectSpotify}
+            disabled={isSigningIn}
+            aria-busy={isSigningIn}
+            className="px-4 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSigningIn ? 'Connecting…' : 'Connect Spotify'}
+          </button>
+          {signInError && (
+            <p className="text-xs text-red-600 mt-3">{signInError}</p>
+          )}
+          <p className="text-xs text-gray-500 mt-3">
+            You can revoke access anytime in your Spotify account settings.
+          </p>
+        </div>
       )}
 
     </main>

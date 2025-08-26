@@ -12,12 +12,12 @@
   - [x] 1.9 Add step-level error boundary with friendly fallback and retry action
 
 - [ ] 2.0 Authentication and consent surfaces (pre-Spotify consent, cookie banner, gating)
-  - [ ] 2.1 Build pre-auth consent screen listing Spotify scopes and “Connect Spotify” CTA
-  - [ ] 2.2 Wire CTA to NextAuth `signIn('spotify')`; show spinner and error states
-  - [ ] 2.3 Add cookie consent banner (Accept/Dismiss) with persistence and ability to revoke
-  - [ ] 2.4 Gate Spotify actions client-side; show connect prompt when unauthenticated
-  - [ ] 2.5 Header user menu: show login/logout, account name, link to revoke cookie consent
-  - [ ] 2.6 Prevent access to playlist/compare/create steps unless authenticated (upload allowed)
+  - [x] 2.1 Build pre-auth consent screen listing Spotify scopes and “Connect Spotify” CTA
+  - [x] 2.2 Wire CTA to NextAuth `signIn('spotify')`; show spinner and error states
+  - [x] 2.3 Add cookie consent banner (Accept/Dismiss) with persistence and ability to revoke
+  - [x] 2.4 Gate Spotify actions client-side; show connect prompt when unauthenticated
+  - [x] 2.5 Header user menu: show login/logout, account name, link to revoke cookie consent
+  - [x] 2.6 Prevent access to playlist/compare/create steps unless authenticated (upload allowed)
   - [ ] 2.7 Track consent and auth events in analytics
 
 - [ ] 3.0 OCR upload and artist review pipeline with autocomplete and artist mapping
