@@ -1,15 +1,15 @@
 ## Tasks
 
-- [ ] 1.0 App shell, routing, and stepper across Upload → Review → Compare → Results → Create
-  - [ ] 1.1 Create routes `/upload`, `/review`, `/compare`, `/results`, `/create` using App Router
-  - [ ] 1.2 Implement persistent header with product title, session status, and user menu
-  - [ ] 1.3 Add stepper component showing current and completed steps
-  - [ ] 1.4 Provide shared state via `FlowStateProvider` to preserve inputs between steps
-  - [ ] 1.5 Navigate forward/back without losing state; guard invalid forward transitions
-  - [ ] 1.6 Handle deep links: if missing prior state, prompt to re-run earlier steps
-  - [ ] 1.7 Mobile-first responsive layouts with centered max-width on desktop
-  - [ ] 1.8 Emit analytics events on step mount/unmount and on navigation
-  - [ ] 1.9 Add step-level error boundary with friendly fallback and retry action
+- [x] 1.0 App shell, routing, and stepper across Upload → Review → Compare → Results → Create
+  - [x] 1.1 Create routes `/upload`, `/review`, `/compare`, `/results`, `/create` using App Router
+  - [x] 1.2 Implement persistent header with product title, session status, and user menu
+  - [x] 1.3 Add stepper component showing current and completed steps
+  - [x] 1.4 Provide shared state via `FlowStateProvider` to preserve inputs between steps
+  - [x] 1.5 Navigate forward/back without losing state; guard invalid forward transitions
+  - [x] 1.6 Handle deep links: if missing prior state, prompt to re-run earlier steps
+  - [x] 1.7 Mobile-first responsive layouts with centered max-width on desktop
+  - [x] 1.8 Emit analytics events on step mount/unmount and on navigation
+  - [x] 1.9 Add step-level error boundary with friendly fallback and retry action
 
 - [ ] 2.0 Authentication and consent surfaces (pre-Spotify consent, cookie banner, gating)
   - [ ] 2.1 Build pre-auth consent screen listing Spotify scopes and “Connect Spotify” CTA
@@ -63,6 +63,7 @@
 - `src/app/layout.tsx`: App shell with header, stepper, providers
 - `src/app/components/Header.tsx`: Persistent header with session status and user menu
 - `src/app/components/Stepper.tsx`: Stepper UI for current/completed states
+- `src/app/components/DeepLinkGuard.tsx`: Guards deep links and guides users to the required prior step
 - `src/app/components/Modal.tsx`: Accessible modal/dialog with focus trapping
 - `src/app/components/Autocomplete.tsx`: Artist autocomplete listbox/option interactions
 - `src/app/components/Dropzone.tsx`: Accessible drag-and-drop file input wrapper

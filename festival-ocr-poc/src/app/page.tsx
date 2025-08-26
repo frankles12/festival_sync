@@ -11,6 +11,7 @@ interface ArtistEntry {
   name: string;
   isEditing: boolean; // True if the entry is currently being edited
   originalOcrText: string; // The originally parsed text, useful for reference or reset
+  selected?: boolean;
 }
 
 // Define type for Spotify search results
@@ -666,35 +667,7 @@ export default function Home() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-24">
-      {/* Header Section */}
-      <div className="w-full max-w-5xl flex justify-between items-center mb-12">
-          <h1 className="text-4xl font-bold">Festival Sync</h1>
-          <div>
-            {status === "loading" && (
-              <p className="text-gray-500">Loading...</p>
-            )}
-            {status === "authenticated" && session?.user && (
-              <div className="flex items-center gap-4">
-                <span className="text-sm">Signed in as {session.user.name || session.user.email}</span>
-                <button 
-                  onClick={() => signOut()} 
-                  className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 transition duration-300"
-                >
-                    Sign Out
-                </button>
-              </div>
-            )}
-            {status === "unauthenticated" && (
-              <button 
-                onClick={() => signIn('spotify')} 
-                className="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition duration-300"
-              >
-                Login with Spotify
-              </button>
-            )}
-          </div>
-      </div>
+    <main className="flex min-h-[60vh] flex-col items-start py-6 sm:py-8">
       
       {/* Rest of the content only shown if authenticated */}
       {status === "authenticated" && (
