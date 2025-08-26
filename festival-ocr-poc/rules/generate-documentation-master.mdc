@@ -1,0 +1,422 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Rule Type
+Manual  
+This rule extends @generate-documentation.mdc to provide master documentation consolidation
+
+# Rule: Master Technical Documentation Consolidation
+
+## Goal
+To intelligently consolidate individual technical documentation files into a comprehensive master document that represents the current state of the entire codebase's technical architecture. This master document serves as the primary technical reference for directors of technology and software engineers.
+
+**NEW: Bootstrap Capability** - Can generate initial master documentation directly from codebase analysis when no individual documentation files exist.
+
+## Architecture Focus
+Optimized for:
+- Microservices architectures
+- RESTful and GraphQL APIs
+- Modern web applications (React, Vue, Angular, etc.)
+- Distributed systems
+
+## Master Document Structure
+
+```markdown
+# [Project Name] Master Technical Documentation
+
+**Version:** [auto-incremented]  
+**Last Updated:** [timestamp]  
+**Architecture Type:** [Microservices/Monolith/Hybrid]
+
+## Executive Summary
+- System overview and purpose
+- Key architectural decisions
+- Technology stack summary
+- Recent significant changes
+
+## Table of Contents
+[Auto-generated with deep linking]
+
+## System Architecture
+
+### High-Level Overview
+- Architecture diagram (auto-generated reference)
+- Service topology (for microservices)
+- Component interaction map
+- Data flow overview
+
+### Microservices Inventory (if applicable)
+| Service Name | Purpose | Technology | API Type | Dependencies |
+|--------------|---------|------------|----------|--------------|
+| [Generated from docs] | | | | |
+
+### Core Components
+#### [Component Name]
+- **Purpose:** [Consolidated from docs]
+- **Technology:** [Stack details]
+- **Key Classes/Modules:** [List with descriptions]
+- **API Endpoints:** [If applicable]
+- **Dependencies:** [Internal and external]
+
+## API Documentation
+
+### API Gateway / Entry Points
+[Consolidated from all API documentation]
+
+### Service APIs (for microservices)
+#### [Service Name] API
+- Base URL
+- Authentication method
+- Rate limiting
+- Endpoints summary
+
+### REST Endpoints
+[Grouped by resource/domain]
+
+### GraphQL Schema (if applicable)
+[Consolidated schema with descriptions]
+
+## Technical Implementation Details
+
+### Design Patterns
+- Architectural patterns in use
+- Common code patterns
+- Anti-patterns to avoid
+
+### Data Architecture
+#### Databases
+| Database | Type | Purpose | Services Using |
+|----------|------|---------|----------------|
+| [Auto-populated] | | | |
+
+#### Data Models
+[Key entities and relationships]
+
+#### Data Flow Patterns
+- Synchronous communication
+- Asynchronous messaging
+- Event-driven patterns
+
+### State Management
+- Client-side state (for web apps)
+- Server-side session management
+- Distributed state handling
+
+## Code Organization
+
+### Repository Structure
+```
+project-root/
+├── services/           # Microservices
+├── packages/          # Shared packages
+├── libs/              # Common libraries
+├── apps/              # Web applications
+└── infrastructure/    # IaC and configs
+```
+
+### Naming Conventions
+[Extracted from codebase patterns]
+
+### Shared Code Strategy
+- Common utilities location
+- Shared types/interfaces
+- Cross-service communication helpers
+
+## Infrastructure & DevOps
+
+### Deployment Architecture
+- Container orchestration (K8s/ECS/etc.)
+- CI/CD pipeline overview
+- Environment strategy
+
+### Configuration Management
+- Environment variables structure
+- Secrets management approach
+- Feature flags system
+
+### Monitoring & Observability
+- Logging strategy
+- Metrics collection
+- Distributed tracing
+
+## Security Architecture
+
+### Authentication & Authorization
+- Auth service/method
+- Token management
+- Permission model
+
+### API Security
+- Rate limiting rules
+- CORS policies
+- Input validation approach
+
+## Testing Strategy
+
+### Test Coverage by Type
+| Type | Coverage | Tools | Location |
+|------|----------|-------|----------|
+| Unit | X% | | |
+| Integration | X% | | |
+| E2E | X% | | |
+
+### Testing Patterns
+[Common testing approaches]
+
+## Development Guidelines
+
+### Getting Started
+- Prerequisites
+- Local development setup
+- Common development tasks
+
+### Coding Standards
+[Extracted from codebase analysis]
+
+### Best Practices
+[Consolidated from documentation]
+
+## Appendices
+
+### A. Service Dependencies Matrix
+[Visual or tabular representation]
+
+### B. Technology Decisions Record
+[Key decisions with rationale]
+
+### C. Individual Documentation Index
+[Links to all source documentation files]
+```
+
+## Consolidation Algorithm
+
+### 1. Content Extraction
+```javascript
+// Pseudo-code for extraction logic
+function extractContent(docFiles) {
+  return {
+    components: extractComponents(docFiles),
+    apis: extractAPIs(docFiles),
+    patterns: extractPatterns(docFiles),
+    dependencies: extractDependencies(docFiles),
+    infrastructure: extractInfrastructure(docFiles)
+  };
+}
+```
+
+### 2. Intelligent Merging
+- **Deduplication**: Remove redundant information
+- **Categorization**: Group by architectural concern
+- **Priority**: Recent changes take precedence
+- **Context Preservation**: Maintain links to source docs
+
+### 3. Section-Based Updates
+Instead of full regeneration:
+1. Identify changed sections from new docs
+2. Update only affected master doc sections
+3. Preserve unchanged content
+4. Update version and timestamp
+
+## Update Triggers
+
+### Automatic Updates
+
+#### 1. Commit-Based (Optional)
+```yaml
+on_commit:
+  prompt: "Update master documentation? (y/n/auto)"
+  options:
+    y: Update immediately
+    n: Skip this time
+    auto: Update if threshold met
+```
+
+#### 2. Threshold-Based
+```yaml
+thresholds:
+  new_docs_count: 5  # Update after 5 new docs
+  lines_changed: 500  # Or 500+ lines documented
+  days_elapsed: 7     # Or weekly maximum
+```
+
+### Manual Commands
+
+#### `@master-doc update`
+- Incremental update from recent individual docs
+- Preserves manual edits in master doc
+- Shows diff preview before applying
+
+#### `@master-doc regenerate`
+- Full rebuild from all documentation
+- Used for major refactoring or initial setup
+- Confirms before overwriting
+
+#### `@master-doc bootstrap`
+- **NEW**: Create initial master documentation from existing codebase
+- Used when adding documentation system to existing project
+- Analyzes codebase structure, APIs, and architecture
+- Creates comprehensive master doc without requiring individual docs first
+
+#### `@master-doc status`
+- Shows pending documentation to consolidate
+- Displays last update time
+- Lists sections that need attention
+
+## Configuration
+
+### Project-Level Settings
+Create `.doc-config.yaml` in project root:
+```yaml
+master_doc:
+  auto_update:
+    on_commit: prompt  # always/never/prompt
+    threshold: 5       # number of docs before auto-update
+  structure:
+    type: microservices  # microservices/monolith/hybrid
+    include_sections:
+      - architecture
+      - api
+      - implementation
+      - infrastructure
+      - security
+      - testing
+  version_control:
+    increment: minor  # major/minor/patch
+    maintain_history: false  # current state only
+```
+
+## AI Implementation Instructions
+
+When consolidating to master document:
+
+1. **Scan** for existing documentation and codebase:
+   - **Primary**: Look for documentation files matching patterns `doc-*-*.md`
+   - **Check**: `documentation-index.md` for complete list
+   - **NEW - Bootstrap Mode**: If no docs found, analyze codebase directly:
+     - Scan for service directories (microservices)
+     - Identify API endpoints in controllers/routes
+     - Extract database models and schemas
+     - Find configuration files
+     - Analyze package.json/requirements.txt for dependencies
+
+2. **Parse** content based on available sources:
+   - **From Docs**: Categorize existing documentation content
+   - **From Code**: Extract architectural information:
+     - Service structure from directory layout
+     - API endpoints from route definitions
+     - Database schemas from models
+     - Dependencies from package files
+     - Infrastructure from docker/k8s files
+
+3. **Merge** intelligently:
+   - For components mentioned multiple times, combine descriptions
+   - For APIs, create comprehensive endpoint list from code analysis
+   - For dependencies, extract from package files and existing docs
+   - For patterns, identify from code structure and existing docs
+
+4. **Generate** coherent sections:
+   - Write clear transitions between topics
+   - Ensure consistent formatting
+   - Create meaningful groupings
+   - Add cross-references where helpful
+
+5. **Update** master document:
+   - Increment version number
+   - Update timestamp
+   - Preserve any manual edits marked with `<!-- manual-edit -->`
+   - Add references to source documents
+
+6. **Validate** the output:
+   - Ensure all links work
+   - Check table formatting
+   - Verify code block syntax
+   - Confirm Confluence compatibility
+
+## Bootstrap Mode Instructions
+
+When running `@master-doc bootstrap` on existing project:
+
+1. **Project Analysis**:
+   - Identify project type (monolith/microservices) from structure
+   - Scan for common patterns:
+     - `/services/` or `/apps/` directories
+     - API route files (`routes/`, `controllers/`, `api/`)
+     - Database files (`models/`, `schemas/`, `migrations/`)
+     - Configuration (`config/`, `.env.example`, `docker-compose.yml`)
+
+2. **Service Discovery** (for microservices):
+   - Map service directories
+   - Identify service dependencies from imports/configs
+   - Extract service purposes from README files or main files
+
+3. **API Extraction**:
+   - Parse route definitions to build endpoint inventory
+   - Extract HTTP methods, paths, and basic descriptions
+   - Identify authentication patterns
+
+4. **Architecture Mapping**:
+   - Create service dependency matrix
+   - Identify data flow patterns
+   - Map database usage per service
+
+5. **Technology Stack Analysis**:
+   - Extract from package.json, requirements.txt, etc.
+   - Identify frameworks from imports and configs
+   - Note version constraints
+
+## Bootstrap Quality Standards
+
+For existing codebases:
+- **Completeness**: Cover all major services/components
+- **Accuracy**: Verify extracted information is current
+- **Structure**: Organize logically even with limited information
+- **Placeholders**: Mark sections needing manual review with `<!-- TODO: Verify -->`
+
+## Quality Standards
+
+### For Microservices
+- Service boundaries clearly defined
+- Inter-service communication documented
+- Service discovery mechanism explained
+- Each service has dedicated section
+
+### For APIs
+- Complete endpoint inventory
+- Request/response examples
+- Error handling patterns
+- Versioning strategy
+
+### For Web Apps
+- Component architecture clear
+- State management explained
+- Build/deployment process documented
+- Performance considerations noted
+
+## Integration with Existing Rule
+
+This rule enhances `@generate-documentation.mdc` by:
+1. Adding master document awareness to individual doc generation
+2. Tracking which content needs consolidation
+3. Providing consolidation commands
+4. Maintaining documentation relationships
+5. **NEW**: Bootstrapping documentation for existing projects
+
+## Output
+
+### File Location
+- **Default**: `/docs/MASTER-TECHNICAL-DOCUMENTATION.md`
+- **Alternative**: Configurable via `.doc-config.yaml`
+
+### Backup Strategy
+- Before each update: `/docs/archive/MASTER-TECHNICAL-DOCUMENTATION-[timestamp].md`
+- Keep last 3 versions
+
+## Success Metrics
+- All architectural decisions documented
+- No orphaned services or components
+- Clear navigation structure
+- Engineers can understand any component within 5 minutes
+- Directors can grasp system architecture in 10 minutes
+

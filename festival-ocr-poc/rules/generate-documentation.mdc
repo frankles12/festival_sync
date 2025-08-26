@@ -1,0 +1,177 @@
+---
+description: Documentation should be generated when the user includes @Commit in their prompt
+alwaysApply: false
+---
+# Rule Type
+Manual  
+This rule is triggered automatically in specific scenarios or when mentioned
+
+# Rule: Generating Technical Documentation
+
+## Goal
+To guide an AI assistant in creating clear, comprehensive technical documentation in **Markdown** format suitable for Confluence.  
+The documentation should be easy for developers to read and understand, covering recent code changes, implementations, and architectural decisions.
+
+## Trigger Scenarios
+This rule activates in three specific scenarios:
+
+### Scenario 1: Post-Task Completion
+- **Trigger:** After a task is marked complete while using `@task-list.mdc`
+- **Process:** When the AI pauses for user approval after completing a sub-task, and the user approves (responds with "yes" or "y"), automatically invoke this rule to generate documentation for the completed task and associated code changes
+
+### Scenario 2: Commit Command
+- **Trigger:** User initiates `@Commit` command in the cursor chat window
+- **Process:** 
+  1. Prompt the user: "Would you like to generate technical documentation based on the current working state changes? (yes/no)"
+  2. If user agrees, analyze the diff of the working state and generate documentation
+  3. **NEW:** After generating individual documentation, check if master documentation update is needed:
+     - If `.doc-config.yaml` exists and `auto_update.on_commit` is set to `prompt` or `always`
+     - Or if threshold for new documents is met (default: 5 documents)
+     - Prompt: "Update master technical documentation? (yes/no/auto)"
+     - If yes/auto, invoke `@generate-documentation-master.mdc` consolidation
+
+### Scenario 3: Code-Based Documentation
+- **Trigger:** User pastes code sections and explicitly requests documentation generation
+- **Process:** 
+  1. User provides code snippets, functions, classes, or file contents in their message
+  2. User mentions `@generate-documentation.mdc` or requests documentation for the provided code
+  3. AI analyzes the provided code and generates comprehensive documentation
+
+## Documentation Content
+The generated documentation should include:
+
+1. **Overview**
+   - Brief summary of changes/features implemented
+   - Context and purpose of the changes
+
+2. **Technical Implementation**
+   - Architecture decisions and rationale
+   - Key components and their interactions
+   - Data flow and state management (if applicable)
+
+3. **Code Structure**
+   - New files created and their purposes
+   - Modified files and nature of changes
+   - Important functions/classes and their responsibilities
+
+4. **API Documentation** (if applicable)
+   - Endpoints created or modified
+   - Request/response formats
+   - Authentication requirements
+
+5. **Dependencies**
+   - New packages or libraries added
+   - Version requirements
+   - Configuration changes
+
+6. **Code Examples**
+   - Usage examples for new features
+   - Integration examples
+   - Common patterns introduced
+   - For Scenario 3: Include the provided code with explanatory comments
+
+7. **Testing Considerations**
+   - Test coverage added
+   - Testing approach
+   - Edge cases considered
+
+8. **Migration/Deployment Notes** (if applicable)
+   - Database changes
+   - Environment variables
+   - Breaking changes
+
+## Output Format
+- **Format:** Markdown (`.md`) compatible with Confluence
+- **Location:** Project root or `/docs/` directory (create if doesn't exist)
+- **Filename:** 
+  - For Scenario 1: `doc-[task-name]-[date].md` (e.g., `doc-user-auth-2024-01-15.md`)
+  - For Scenario 2: `doc-commit-[sanitized-commit-message].md` (e.g., `doc-commit-add-user-authentication.md`)
+  - For Scenario 3: `doc-code-[component-name]-[date].md` (e.g., `doc-code-auth-service-2024-01-15.md`)
+
+**Note for Scenario 2 filename sanitization:**
+- Convert commit message to lowercase
+- Replace spaces with hyphens
+- Remove special characters (keep only letters, numbers, and hyphens)
+- Truncate to maximum 50 characters if needed
+- Remove any leading/trailing hyphens
+
+## File Management
+1. **Check for existing documentation:**
+   - Look for existing documentation files in the project
+   - If found, append new content with proper section headers and timestamps
+   - If not found, create a new file
+
+2. **Documentation Index:**
+   - Maintain a `documentation-index.md` file listing all documentation files
+   - Update this index when creating or updating documentation
+   - **NEW:** Track consolidation status for master documentation
+
+3. **Master Documentation Awareness:**
+   - After creating individual documentation, update tracking for master doc consolidation
+   - If master doc exists, note that new content is pending consolidation
+   - Include metadata for categorization (component, API, infrastructure, etc.)
+
+## Confluence Formatting Guidelines
+Ensure documentation is Confluence-compatible:
+- Use standard Markdown headers (##, ###)
+- Code blocks with language specification (```javascript)
+- Tables using pipe syntax
+- Bullet points and numbered lists
+- Avoid HTML-specific formatting
+- Include a table of contents for longer documents
+
+## AI Instructions
+
+When this rule is invoked, the AI must:
+
+1. **Identify the trigger scenario** and gather appropriate context
+2. **Analyze changes:**
+   - For Scenario 1: Review the completed task and associated code changes
+   - For Scenario 2: Analyze the git diff of the working state
+   - For Scenario 3: Analyze the provided code snippets, functions, or file contents
+3. **Generate comprehensive documentation** following the content structure
+4. **Format for Confluence** compatibility
+5. **Create or update** the appropriate documentation file
+6. **Update the documentation index** if creating a new file
+7. **NEW: Add consolidation metadata** to help master doc generation:
+   ```yaml
+   <!-- consolidation-metadata
+   category: [api|component|infrastructure|feature|bugfix]
+   services: [list of affected services]
+   components: [list of affected components]
+   priority: [high|medium|low]
+   -->
+   ```
+8. **Check for master documentation update** (primarily for Scenario 2):
+   - Read `.doc-config.yaml` if exists
+   - Count pending documentations since last master update
+   - Prompt for master doc update if appropriate
+9. **Inform the user** of the documentation location and provide a brief summary
+
+## Quality Standards
+- Use clear, concise language
+- Include practical examples
+- Explain the "why" behind technical decisions
+- Structure content logically with proper headings
+- Ensure code examples are complete and runnable
+- Add comments to complex code snippets
+- **NEW:** Include metadata for efficient master doc consolidation
+
+## Integration Notes
+- This rule works in conjunction with `@task-list.mdc` for Scenario 1
+- For Scenario 2, it analyzes uncommitted changes in the working directory
+- For Scenario 3, it works with user-provided code snippets for standalone documentation
+- Documentation should reference relevant PRD and task files when applicable
+- **NEW:** Integrates with `@generate-documentation-master.mdc` for consolidated technical documentation
+- **NEW:** Supports configuration via `.doc-config.yaml` for customization
+
+## Master Documentation Integration
+
+When individual documentation is created:
+1. Add to pending consolidation queue
+2. Include proper categorization metadata
+3. For Scenario 2 (commits), check if master update should be triggered
+4. Maintain links between individual and master documentation
+
+See `@generate-documentation-master.mdc` for full master documentation details.
+

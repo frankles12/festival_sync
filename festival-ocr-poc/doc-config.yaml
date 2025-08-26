@@ -1,0 +1,130 @@
+# Master Documentation Configuration
+# Rename this file to .doc-config.yaml to activate
+
+# Master documentation settings
+master_doc:
+  # Automatic update settings
+  auto_update:
+    # Options: always, never, prompt
+    # - always: Automatically update master doc when triggered
+    # - never: Never automatically update (manual only)
+    # - prompt: Ask user each time
+    on_commit: prompt
+    
+    # Number of new individual docs before triggering update
+    threshold: 5
+    
+    # Maximum days before suggesting update (0 = disabled)
+    max_days: 7
+  
+  # Document structure configuration
+  structure:
+    # Architecture type: microservices, monolith, hybrid
+    type: microservices
+    
+    # Sections to include in master doc
+    # Comment out any sections you don't want
+    include_sections:
+      - architecture
+      - api
+      - implementation
+      - infrastructure
+      - security
+      - testing
+      - development
+    
+    # Custom sections (add your own)
+    custom_sections:
+      # - performance
+      # - monitoring
+      # - compliance
+  
+  # Version control settings
+  version_control:
+    # How to increment version: major, minor, patch
+    increment: minor
+    
+    # Keep historical versions (false = current state only)
+    maintain_history: false
+    
+    # Number of backup versions to keep
+    backup_count: 3
+  
+  # Output settings
+  output:
+    # Master document location
+    path: /docs/MASTER-TECHNICAL-DOCUMENTATION.md
+    
+    # Archive location for backups
+    archive_path: /docs/archive/
+    
+    # Include timestamp in master doc
+    include_timestamp: true
+    
+    # Include version number
+    include_version: true
+
+# Individual documentation settings
+individual_docs:
+  # Default location for individual docs
+  path: /docs/
+  
+  # Include consolidation metadata
+  include_metadata: true
+  
+  # Categories for documentation
+  valid_categories:
+    - api
+    - component
+    - infrastructure
+    - feature
+    - bugfix
+    - security
+    - performance
+    - refactor
+
+# Project-specific settings
+project:
+  # Project name (used in master doc title)
+  name: "My Microservices Project"
+  
+  # Primary architecture style
+  architecture: microservices
+  
+  # Service naming pattern (for auto-detection)
+  service_pattern: "*-service"
+  
+  # API gateway configuration
+  api_gateway:
+    enabled: true
+    name: "API Gateway"
+    base_url: "https://api.example.com"
+
+# Integration settings
+integrations:
+  # Confluence settings
+  confluence:
+    # Auto-sync to Confluence
+    enabled: false
+    
+    # Space key
+    space_key: "TECH"
+    
+    # Parent page ID
+    parent_page_id: "12345"
+  
+  # Git integration
+  git:
+    # Include commit hash in docs
+    include_commit_hash: true
+    
+    # Include branch name
+    include_branch: true
+
+# Notification settings
+notifications:
+  # Remind about pending consolidations
+  remind_threshold: 10
+  
+  # Show status in commit prompts
+  show_pending_count: true 
